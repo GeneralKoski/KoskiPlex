@@ -30,14 +30,14 @@ client = Groq()
 VOICES_DIR = Path(__file__).parent / "voices"
 VOICES_DIR.mkdir(exist_ok=True)
 
-STT_MODEL = "whisper-large-v3"
-LLM_MODEL = "llama-3.3-70b-versatile"
-SYSTEM_PROMPT = (
+STT_MODEL = os.getenv("STT_MODEL", "whisper-large-v3")
+LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
+SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", (
     "You are KoskiPlex, a fast voice assistant. "
     "Always respond in 1-2 short sentences. Be direct and concise. "
     "Never use lists, markdown, or formatting — you are being read aloud. "
     "Respond in the same language the user speaks to you."
-)
+))
 MAX_HISTORY = 20
 WHISPER_HALLUCINATIONS = {
     "thank you", "thanks", "thank you.", "thanks.", "thank you for watching",
@@ -72,9 +72,21 @@ xtts_model = None
 def get_xtts():
     global xtts_model
     if xtts_model is None:
-        from TTS.api import TTS as CoquiTTS
-        xtts_model = CoquiTTS("tts_models/multilingual/multi-dataset/xtts_v2")
+        try:
+            from TTS.api import TTS as CoquiTTS
+            xtts_model = CoquiTTS("tts_models/multilingual/multi-dataset/xtts_v2")
+            print("XTTS model loaded successfully.")
+        except Exception as e:
+            print(f"Error loading XTTS: {e}")
     return xtts_model
+
+
+@app.on_event("startup")
+async def startup_event():
+    # Pre-load XTTS in background
+    if os.getenv("PRELOAD_XTTS", "true").lower() == "true":
+        print("Starting XTTS pre-load in background...")
+        asyncio.create_task(asyncio.to_thread(get_xtts))
 
 
 class ChatRequest(BaseModel):
