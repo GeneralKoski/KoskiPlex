@@ -32,12 +32,12 @@ VOICES_DIR.mkdir(exist_ok=True)
 
 STT_MODEL = os.getenv("STT_MODEL", "whisper-large-v3")
 LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
-SYSTEM_PROMPT = os.getenv("SYSTEM_PROMPT", (
+SYSTEM_PROMPT = (
     "You are KoskiPlex, a fast voice assistant. "
     "Always respond in 1-2 short sentences. Be direct and concise. "
     "Never use lists, markdown, or formatting — you are being read aloud. "
     "Respond in the same language the user speaks to you."
-))
+)
 MAX_HISTORY = 20
 WHISPER_HALLUCINATIONS = {
     "thank you", "thanks", "thank you.", "thanks.", "thank you for watching",
