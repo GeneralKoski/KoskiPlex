@@ -1,6 +1,12 @@
 import React from 'react';
+import { Timing } from '../types';
 
-const Header = ({ detectedLang, timing }) => {
+interface HeaderProps {
+  detectedLang: string | null;
+  timing: Timing | null;
+}
+
+const Header: React.FC<HeaderProps> = ({ detectedLang, timing }) => {
   return (
     <header className="header">
       <h1 className="logo">KOSKI<span className="logo-accent">PLEX</span></h1>

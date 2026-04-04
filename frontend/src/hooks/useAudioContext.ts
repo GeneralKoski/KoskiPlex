@@ -1,15 +1,24 @@
-import { useRef, useCallback, useEffect } from 'react'
+import { useRef, useCallback, useEffect, RefObject } from 'react'
 
-export function useAudioContext() {
-  const audioContextRef = useRef(null)
-  const analyserRef = useRef(null)
-  const queueRef = useRef([])
-  const isPlayingRef = useRef(false)
-  const sourceRef = useRef(null)
+export interface AudioContextHook {
+  initAudioContext: () => { ctx: AudioContext; analyser: AnalyserNode };
+  queueAudio: (base64: string) => void;
+  stopPlayback: () => void;
+  analyser: RefObject<AnalyserNode | null>;
+  audioContext: RefObject<AudioContext | null>;
+  isPlaying: RefObject<boolean>;
+}
+
+export function useAudioContext(): AudioContextHook {
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const queueRef = useRef<string[]>([])
+  const isPlayingRef = useRef<boolean>(false)
+  const sourceRef = useRef<AudioBufferSourceNode | null>(null)
 
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
-      const AudioContextClass = window.AudioContext || window.webkitAudioContext
+      const AudioContextClass = (window.AudioContext || (window as any).webkitAudioContext) as typeof AudioContext
       const ctx = new AudioContextClass()
       const analyser = ctx.createAnalyser()
       analyser.fftSize = 256
@@ -19,11 +28,11 @@ export function useAudioContext() {
       analyserRef.current = analyser
     }
     
-    if (audioContextRef.current.state === 'suspended') {
-      audioContextRef.current.resume()
+    if (audioContextRef.current!.state === 'suspended') {
+      audioContextRef.current!.resume()
     }
     
-    return { ctx: audioContextRef.current, analyser: analyserRef.current }
+    return { ctx: audioContextRef.current!, analyser: analyserRef.current! }
   }, [])
 
   const playNext = useCallback(async () => {
@@ -35,6 +44,7 @@ export function useAudioContext() {
     isPlayingRef.current = true
     const { ctx, analyser } = initAudioContext()
     const base64 = queueRef.current.shift()
+    if (!base64) return
     
     try {
       const binaryString = window.atob(base64)
@@ -57,7 +67,7 @@ export function useAudioContext() {
     }
   }, [initAudioContext])
 
-  const queueAudio = useCallback((base64) => {
+  const queueAudio = useCallback((base64: string) => {
     queueRef.current.push(base64)
     if (!isPlayingRef.current) {
       playNext()

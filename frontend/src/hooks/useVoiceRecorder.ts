@@ -1,20 +1,33 @@
 import { useRef, useCallback, useState, useEffect } from 'react'
+import { AppStatus } from '../types'
 
 const SILENCE_THRESHOLD = 50
 const SILENCE_DURATION = 1500
 const MIN_SPEECH_MS = 800
 
-export function useVoiceRecorder({ onAudioStop, onStatusChange, analyserNode }) {
+interface UseVoiceRecorderProps {
+  onAudioStop: (blob: Blob | null) => void;
+  onStatusChange: (status: AppStatus, errMsg?: string) => void;
+  analyserNode: AnalyserNode | null;
+}
+
+interface VoiceRecorderHook {
+  isRecording: boolean;
+  startRecording: () => Promise<void>;
+  stopRecording: () => void;
+}
+
+export function useVoiceRecorder({ onAudioStop, onStatusChange, analyserNode }: UseVoiceRecorderProps): VoiceRecorderHook {
   const [isRecording, setIsRecording] = useState(false)
-  const mediaRecorderRef = useRef(null)
-  const audioChunksRef = useRef([])
-  const silenceCheckRef = useRef(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const silenceCheckRef = useRef<number | null>(null)
   const hadSpeechRef = useRef(false)
-  const speechStartRef = useRef(null)
-  const streamRef = useRef(null)
+  const speechStartRef = useRef<number | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
 
   const stopRecording = useCallback(() => {
-    if (silenceCheckRef.current) {
+    if (silenceCheckRef.current !== null) {
       cancelAnimationFrame(silenceCheckRef.current)
       silenceCheckRef.current = null
     }
@@ -62,7 +75,7 @@ export function useVoiceRecorder({ onAudioStop, onStatusChange, analyserNode }) 
       // Use the provided analyser node for VAD
       if (analyserNode) {
         const dataArray = new Uint8Array(analyserNode.frequencyBinCount)
-        let silentSince = null
+        let silentSince: number | null = null
 
         const check = () => {
           analyserNode.getByteFrequencyData(dataArray)
@@ -74,7 +87,7 @@ export function useVoiceRecorder({ onAudioStop, onStatusChange, analyserNode }) 
             silentSince = null
           } else if (hadSpeechRef.current) {
             if (!silentSince) silentSince = Date.now()
-            if (Date.now() - silentSince > SILENCE_DURATION) {
+            if (Date.now() - silentSince! > SILENCE_DURATION) {
               stopRecording()
               return
             }

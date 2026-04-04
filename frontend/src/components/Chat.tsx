@@ -1,7 +1,13 @@
 import React, { useEffect, useRef } from 'react';
+import { Message } from '../types';
 
-const Chat = ({ messages, streamingReply }) => {
-  const chatEndRef = useRef(null);
+interface ChatProps {
+  messages: Message[];
+  streamingReply: string;
+}
+
+const Chat: React.FC<ChatProps> = ({ messages, streamingReply }) => {
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });

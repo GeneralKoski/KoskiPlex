@@ -1,18 +1,29 @@
 import React, { useRef, useEffect } from 'react';
+import { AccentColor, AppStatus } from '../types';
 
 const VIZ_BARS = 64;
 const VIZ_INNER_RADIUS = 88;
 const VIZ_MAX_BAR = 50;
 
-const Orb = ({ isActive, status, accent, analyserNode, onClick }) => {
-  const canvasRef = useRef(null);
-  const vizFrameRef = useRef(null);
+interface OrbProps {
+  isActive: boolean;
+  status: AppStatus;
+  accent: AccentColor;
+  analyserNode: AnalyserNode | null;
+  onClick: () => void;
+}
+
+const Orb: React.FC<OrbProps> = ({ isActive, status, accent, analyserNode, onClick }) => {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const vizFrameRef = useRef<number | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !analyserNode) return;
 
     const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
     const dpr = window.devicePixelRatio || 1;
     const size = 320;
     canvas.width = size * dpr;
@@ -53,18 +64,22 @@ const Orb = ({ isActive, status, accent, analyserNode, onClick }) => {
     };
 
     vizFrameRef.current = requestAnimationFrame(draw);
-    return () => cancelAnimationFrame(vizFrameRef.current);
+    return () => {
+      if (vizFrameRef.current !== null) {
+        cancelAnimationFrame(vizFrameRef.current);
+      }
+    };
   }, [accent, analyserNode]);
 
   return (
-    <div className="orb-area">
-      <canvas ref={canvasRef} className="viz-canvas" width="320" height="320" />
+    <div className="orb-area" data-status={status}>
+      <canvas ref={canvasRef} className="viz-canvas" style={{ width: '320px', height: '320px' }} />
       <div className="orb-rings">
         <div className="ring ring-1" />
         <div className="ring ring-2" />
         <div className="ring ring-3" />
       </div>
-      <button className="orb" onClick={onClick}>
+      <button className="orb" onClick={onClick} type="button" aria-label={isActive ? 'Stop session' : 'Start session'}>
         <div className="orb-icon">
           {isActive ? (
             <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
