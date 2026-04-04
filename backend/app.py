@@ -22,7 +22,7 @@ app.add_middleware(
 client = Groq()
 
 STT_MODEL = "whisper-large-v3"
-LLM_MODEL = "llama3-70b-8192"
+LLM_MODEL = "llama-3.3-70b-versatile"
 SYSTEM_PROMPT = (
     "You are KoskiPlex, a fast voice assistant. "
     "Always respond in 1-2 short sentences. Be direct and concise. "
@@ -36,12 +36,13 @@ class ChatRequest(BaseModel):
     history: list[dict] = []
 
 
-async def transcribe_audio(audio_bytes: bytes, filename: str) -> str:
+async def transcribe_audio(audio_bytes: bytes, filename: str) -> dict:
     transcription = client.audio.transcriptions.create(
         model=STT_MODEL,
         file=(filename, audio_bytes),
+        response_format="verbose_json",
     )
-    return transcription.text
+    return {"text": transcription.text, "language": transcription.language}
 
 
 def get_llm_reply(user_text: str, history: list[dict]) -> str:
@@ -64,8 +65,8 @@ async def health():
 @app.post("/transcribe")
 async def transcribe(file: UploadFile = File(...)):
     audio_bytes = await file.read()
-    text = await transcribe_audio(audio_bytes, file.filename)
-    return {"text": text}
+    result = await transcribe_audio(audio_bytes, file.filename)
+    return result
 
 
 @app.post("/chat")
@@ -82,10 +83,14 @@ async def voice(
     audio_bytes = await file.read()
     parsed_history = json.loads(history)
 
-    transcript = await transcribe_audio(audio_bytes, file.filename)
-    reply = get_llm_reply(transcript, parsed_history)
+    stt_result = await transcribe_audio(audio_bytes, file.filename)
+    reply = get_llm_reply(stt_result["text"], parsed_history)
 
-    return {"transcript": transcript, "reply": reply}
+    return {
+        "transcript": stt_result["text"],
+        "reply": reply,
+        "language": stt_result["language"],
+    }
 
 
 # ============================================================

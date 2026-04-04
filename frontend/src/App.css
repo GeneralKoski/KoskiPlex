@@ -24,19 +24,27 @@
 .status {
   color: #888;
   font-size: 0.85rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
 
+.lang-badge {
+  color: #7c3aed;
+  font-size: 0.75rem;
+  margin: 0 0 1.5rem;
+  text-transform: capitalize;
+  letter-spacing: 0.05em;
+}
+
 .ptt-button {
-  width: 140px;
-  height: 140px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
   border: 3px solid #333;
   background: #1e1e2e;
   color: #ccc;
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -57,9 +65,21 @@
   animation: pulse 1.2s ease-in-out infinite;
 }
 
+.ptt-button.conversing {
+  border-color: #7c3aed;
+  background: #1e1a2e;
+  color: #c084fc;
+  animation: pulse-purple 2s ease-in-out infinite;
+}
+
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.4); }
   50% { box-shadow: 0 0 0 20px rgba(229, 62, 62, 0); }
+}
+
+@keyframes pulse-purple {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.3); }
+  50% { box-shadow: 0 0 0 15px rgba(124, 58, 237, 0); }
 }
 
 .controls {
@@ -67,6 +87,8 @@
   gap: 1rem;
   align-items: center;
   margin-top: 1.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .toggle {
@@ -81,6 +103,27 @@
 .toggle input {
   accent-color: #7c3aed;
   cursor: pointer;
+}
+
+.mute-btn {
+  background: none;
+  border: 1px solid #333;
+  color: #888;
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mute-btn:hover {
+  border-color: #555;
+  color: #ccc;
+}
+
+.mute-btn.muted {
+  border-color: #e53e3e;
+  color: #e53e3e;
 }
 
 .clear-btn {
