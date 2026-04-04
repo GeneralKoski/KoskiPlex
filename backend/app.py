@@ -72,12 +72,15 @@ xtts_model = None
 def get_xtts():
     global xtts_model
     if xtts_model is None:
+        start_t = time.time()
+        print("🚀 [XTTS] Loading model tts_models/multilingual/multi-dataset/xtts_v2...")
         try:
             from TTS.api import TTS as CoquiTTS
             xtts_model = CoquiTTS("tts_models/multilingual/multi-dataset/xtts_v2")
-            print("XTTS model loaded successfully.")
+            elapsed = time.time() - start_t
+            print(f"✅ [XTTS] Model loaded successfully in {elapsed:.2f}s.")
         except Exception as e:
-            print(f"Error loading XTTS: {e}")
+            print(f"❌ [XTTS] Error loading model: {e}")
     return xtts_model
 
 
@@ -85,7 +88,7 @@ def get_xtts():
 async def startup_event():
     # Pre-load XTTS in background
     if os.getenv("PRELOAD_XTTS", "true").lower() == "true":
-        print("Starting XTTS pre-load in background...")
+        print("💡 [Startup] Triggering XTTS pre-load task...")
         asyncio.create_task(asyncio.to_thread(get_xtts))
 
 
