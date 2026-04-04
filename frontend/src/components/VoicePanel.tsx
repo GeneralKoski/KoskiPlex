@@ -1,5 +1,7 @@
-import React, { RefObject } from 'react';
-import { VoicesState, SelectedVoice } from '../types';
+import { motion } from "framer-motion";
+import { Trash2, Upload, X } from "lucide-react";
+import React from "react";
+import { SelectedVoice, VoicesState } from "../types";
 
 interface VoicePanelProps {
   voices: VoicesState;
@@ -8,74 +10,115 @@ interface VoicePanelProps {
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onDelete: (name: string) => void;
   onClose: () => void;
-  fileInputRef: RefObject<HTMLInputElement | null>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
 }
 
-const VoicePanel: React.FC<VoicePanelProps> = ({ 
-  voices, 
-  selectedVoice, 
-  onVoiceSelect, 
-  onUpload, 
-  onDelete, 
-  onClose, 
-  fileInputRef 
+const EDGE_VOICES_LIST = [
+  { id: "en-US-JennyNeural", label: "Jenny (English US)", icon: "🇺🇸" },
+  { id: "it-IT-IsabellaNeural", label: "Isabella (Italian)", icon: "🇮🇹" },
+  { id: "es-ES-ElviraNeural", label: "Elvira (Spanish)", icon: "🇪🇸" },
+  { id: "fr-FR-DeniseNeural", label: "Denise (French)", icon: "🇫🇷" },
+  { id: "de-DE-KatjaNeural", label: "Katja (German)", icon: "🇩🇪" },
+];
+
+const VoicePanel: React.FC<VoicePanelProps> = ({
+  voices,
+  selectedVoice,
+  onVoiceSelect,
+  onUpload,
+  onDelete,
+  onClose,
+  fileInputRef,
 }) => {
   return (
-    <div className="voice-panel">
+    <motion.div
+      className="voice-panel"
+      initial={{ opacity: 0, y: 40, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 30, scale: 0.95 }}
+      transition={{ duration: 0.3, ease: [0.23, 1, 0.32, 1] }}
+    >
       <div className="voice-panel-header">
-        <span className="voice-panel-title">Voices</span>
-        <button className="voice-panel-close" onClick={onClose} type="button">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
+        <h3 className="voice-panel-title">Voice Settings</h3>
+        <button
+          className="voice-panel-close"
+          onClick={onClose}
+          title="Close panel"
+        >
+          <X size={18} strokeWidth={2} />
         </button>
       </div>
 
       <div className="voice-section">
-        <span className="voice-section-label">Default</span>
-        <div className="voice-option" onClick={() => onVoiceSelect({ engine: 'edge', voice: '' })}>
-          <span className={`voice-radio ${selectedVoice.engine === 'edge' && !selectedVoice.voice ? 'active' : ''}`} />
-          <span className="voice-name">Auto (by language)</span>
-        </div>
-      </div>
-
-      {voices.custom.length > 0 && (
-        <div className="voice-section">
-          <span className="voice-section-label">Custom</span>
-          {voices.custom.map((v) => (
+        <span className="voice-section-label">Premium Clone Voices</span>
+        {voices.custom.length === 0 ? (
+          <div className="text-xs text-slate-500 py-2 italic text-center">
+            No cloned voices available
+          </div>
+        ) : (
+          voices.custom.map((v) => (
             <div key={v.name} className="voice-option">
-              <div className="voice-option-main" onClick={() => onVoiceSelect({ engine: 'xtts', voice: v.name })}>
-                <span className={`voice-radio ${selectedVoice.engine === 'xtts' && selectedVoice.voice === v.name ? 'active' : ''}`} />
+              <div
+                className="voice-option-main"
+                onClick={() => onVoiceSelect({ engine: "xtts", voice: v.name })}
+              >
+                <div
+                  className={`voice-radio ${selectedVoice.engine === "xtts" && selectedVoice.voice === v.name ? "active" : ""}`}
+                />
                 <span className="voice-name">{v.name}</span>
               </div>
-              <button className="voice-delete" onClick={() => onDelete(v.name)} type="button" aria-label={`Delete voice ${v.name}`}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                </svg>
+              <button
+                className="voice-delete"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(v.name);
+                }}
+                title="Delete voice"
+              >
+                <Trash2 size={16} />
               </button>
             </div>
-          ))}
-        </div>
-      )}
+          ))
+        )}
+      </div>
 
-      <button className="voice-upload-btn" onClick={() => fileInputRef.current?.click()} type="button">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="17 8 12 3 7 8" />
-          <line x1="12" y1="3" x2="12" y2="15" />
-        </svg>
-        Upload voice sample
-      </button>
+      <div className="voice-section">
+        <span className="voice-section-label">Standard Voices</span>
+        {EDGE_VOICES_LIST.map((v) => (
+          <div
+            key={v.id}
+            className="voice-option"
+            onClick={() => onVoiceSelect({ engine: "edge", voice: v.id })}
+          >
+            <div className="voice-option-main">
+              <div
+                className={`voice-radio ${selectedVoice.engine === "edge" && selectedVoice.voice === v.id ? "active" : ""}`}
+              />
+              <span className="voice-name">
+                {v.icon} {v.label}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
       <input
-        ref={fileInputRef}
         type="file"
-        accept=".wav,.mp3,.m4a"
-        hidden
+        ref={fileInputRef}
         onChange={onUpload}
+        accept="audio/*"
+        style={{ display: "none" }}
       />
-    </div>
+      <motion.button
+        className="voice-upload-btn"
+        onClick={() => fileInputRef.current?.click()}
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+      >
+        <Upload size={16} />
+        Upload New Voice Clone
+      </motion.button>
+    </motion.div>
   );
 };
 

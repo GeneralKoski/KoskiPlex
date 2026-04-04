@@ -60,12 +60,12 @@ Frontend runs on `http://localhost:5173`.
 
 ## API Endpoints
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/health` | GET | Healthcheck |
-| `/transcribe` | POST | Speech-to-text only (accepts audio file) |
-| `/chat` | POST | LLM chat only (accepts JSON with text + history) |
-| `/voice` | POST | Full pipeline: audio → STT → LLM → text reply |
+| Endpoint      | Method | Description                                      |
+| ------------- | ------ | ------------------------------------------------ |
+| `/health`     | GET    | Healthcheck                                      |
+| `/transcribe` | POST   | Speech-to-text only (accepts audio file)         |
+| `/chat`       | POST   | LLM chat only (accepts JSON with text + history) |
+| `/voice`      | POST   | Full pipeline: audio → STT → LLM → text reply    |
 
 ## TTS Options
 

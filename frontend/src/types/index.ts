@@ -1,5 +1,5 @@
 export interface Message {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   text: string;
 }
 
@@ -12,7 +12,7 @@ export interface Timing {
 
 export interface Voice {
   name: string;
-  engine: 'edge' | 'xtts';
+  engine: "edge" | "xtts";
   language?: string;
 }
 
@@ -22,12 +22,19 @@ export interface VoicesState {
 }
 
 export interface SelectedVoice {
-  engine: 'edge' | 'xtts';
+  engine: "edge" | "xtts";
   voice: string;
 }
 
 export interface WSMessage {
-  type: 'transcript' | 'reply_chunk' | 'audio_chunk' | 'reply_done' | 'interrupt' | 'clear' | 'set_voice';
+  type:
+    | "transcript"
+    | "reply_chunk"
+    | "audio_chunk"
+    | "reply_done"
+    | "interrupt"
+    | "clear"
+    | "set_voice";
   text?: string;
   data?: string; // hex for audio in, base64 for audio out
   language?: string;
@@ -38,7 +45,12 @@ export interface WSMessage {
   ext?: string;
 }
 
-export type AppStatus = 'idle' | 'listening' | 'processing' | 'speaking' | 'error';
+export type AppStatus =
+  | "idle"
+  | "listening"
+  | "processing"
+  | "speaking"
+  | "error";
 
 export interface AccentColor {
   r: number;

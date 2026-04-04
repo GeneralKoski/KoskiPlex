@@ -1,3 +1,4 @@
+import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useEffect, useRef, useState } from "react";
 import "./App.css";
 
@@ -256,31 +257,52 @@ function App() {
       <Header detectedLang={detectedLang} timing={timing} />
 
       <main className="main">
-        <Orb
-          isActive={isActive}
-          status={status}
-          accent={accent}
-          analyserNode={analyser.current}
-          onClick={isActive ? stopSession : startSession}
-        />
+        <div className="flex-1 overflow-hidden relative flex flex-col w-full max-w-2xl mx-auto">
+          <div className="flex-1 overflow-visible relative flex flex-col items-center justify-center min-h-[350px]">
+            <Orb
+              isActive={isActive}
+              status={status}
+              accent={accent}
+              analyserNode={analyser.current}
+              onClick={isActive ? stopSession : startSession}
+            />
 
-        <p className="status-text">{statusLabel}</p>
-        {error && <p className="error-text">{error}</p>}
+            <div className="mt-8 text-center min-h-[60px]">
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={status}
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -5 }}
+                  transition={{ duration: 0.2 }}
+                  className="flex flex-col items-center gap-2"
+                >
+                  <span className="status-text m-0">{statusLabel}</span>
+                  {error && <p className="error-text m-0">{error}</p>}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </div>
 
-        <Chat messages={messages} streamingReply={streamingReply} />
+          <div className="h-[40vh] w-full relative flex flex-col">
+            <Chat messages={messages} streamingReply={streamingReply} />
+          </div>
+        </div>
       </main>
 
-      {showVoicePanel && (
-        <VoicePanel
-          voices={voices}
-          selectedVoice={selectedVoice}
-          onVoiceSelect={setSelectedVoice}
-          onUpload={handleVoiceUpload}
-          onDelete={handleDeleteVoice}
-          onClose={() => setShowVoicePanel(false)}
-          fileInputRef={fileInputRef}
-        />
-      )}
+      <AnimatePresence>
+        {showVoicePanel && (
+          <VoicePanel
+            voices={voices}
+            selectedVoice={selectedVoice}
+            onVoiceSelect={setSelectedVoice}
+            onUpload={handleVoiceUpload}
+            onDelete={handleDeleteVoice}
+            onClose={() => setShowVoicePanel(false)}
+            fileInputRef={fileInputRef}
+          />
+        )}
+      </AnimatePresence>
 
       <Controls
         onShowVoicePanel={() => {

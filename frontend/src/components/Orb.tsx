@@ -1,5 +1,7 @@
-import React, { useRef, useEffect } from 'react';
-import { AccentColor, AppStatus } from '../types';
+import { AnimatePresence, motion } from "framer-motion";
+import { Mic, Square } from "lucide-react";
+import React, { useEffect, useRef } from "react";
+import { AccentColor, AppStatus } from "../types";
 
 const VIZ_BARS = 64;
 const VIZ_INNER_RADIUS = 88;
@@ -13,7 +15,13 @@ interface OrbProps {
   onClick: () => void;
 }
 
-const Orb: React.FC<OrbProps> = ({ isActive, status, accent, analyserNode, onClick }) => {
+const Orb: React.FC<OrbProps> = ({
+  isActive,
+  status,
+  accent,
+  analyserNode,
+  onClick,
+}) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const vizFrameRef = useRef<number | null>(null);
 
@@ -21,7 +29,7 @@ const Orb: React.FC<OrbProps> = ({ isActive, status, accent, analyserNode, onCli
     const canvas = canvasRef.current;
     if (!canvas || !analyserNode) return;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
@@ -57,7 +65,7 @@ const Orb: React.FC<OrbProps> = ({ isActive, status, accent, analyserNode, onCli
         ctx.lineTo(x2, y2);
         ctx.strokeStyle = `rgba(${accent.r}, ${accent.g}, ${accent.b}, ${a})`;
         ctx.lineWidth = 2.5;
-        ctx.lineCap = 'round';
+        ctx.lineCap = "round";
         ctx.stroke();
       }
       vizFrameRef.current = requestAnimationFrame(draw);
@@ -73,28 +81,52 @@ const Orb: React.FC<OrbProps> = ({ isActive, status, accent, analyserNode, onCli
 
   return (
     <div className="orb-area" data-status={status}>
-      <canvas ref={canvasRef} className="viz-canvas" style={{ width: '320px', height: '320px' }} />
+      <canvas
+        ref={canvasRef}
+        className="viz-canvas"
+        style={{ width: "320px", height: "320px" }}
+      />
       <div className="orb-rings">
         <div className="ring ring-1" />
         <div className="ring ring-2" />
         <div className="ring ring-3" />
       </div>
-      <button className="orb" onClick={onClick} type="button" aria-label={isActive ? 'Stop session' : 'Start session'}>
+      <motion.button
+        className="orb"
+        onClick={onClick}
+        type="button"
+        aria-label={isActive ? "Stop session" : "Start session"}
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
+      >
         <div className="orb-icon">
-          {isActive ? (
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-              <rect x="6" y="6" width="12" height="12" rx="2" />
-            </svg>
-          ) : (
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
-          )}
+          <AnimatePresence mode="wait">
+            {isActive ? (
+              <motion.div
+                key="stop"
+                initial={{ opacity: 0, scale: 0.5, rotate: -90 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.5, rotate: 90 }}
+                transition={{ duration: 0.2 }}
+                style={{ display: "flex" }}
+              >
+                <Square strokeWidth={3} size={28} fill="currentColor" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="mic"
+                initial={{ opacity: 0, scale: 0.5, rotate: 90 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.5, rotate: -90 }}
+                transition={{ duration: 0.2 }}
+                style={{ display: "flex" }}
+              >
+                <Mic strokeWidth={2} size={32} />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      </button>
+      </motion.button>
     </div>
   );
 };
