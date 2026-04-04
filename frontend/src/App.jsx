@@ -9,10 +9,25 @@ const VIZ_BARS = 64
 const VIZ_INNER_RADIUS = 88
 const VIZ_MAX_BAR = 50
 
+const LANG_MAP = {
+  english: 'en-US', italian: 'it-IT', spanish: 'es-ES', french: 'fr-FR',
+  german: 'de-DE', portuguese: 'pt-BR', dutch: 'nl-NL', russian: 'ru-RU',
+  japanese: 'ja-JP', chinese: 'zh-CN', korean: 'ko-KR', arabic: 'ar-SA',
+  hindi: 'hi-IN', turkish: 'tr-TR', polish: 'pl-PL', swedish: 'sv-SE',
+}
+
 const STATE_COLORS = {
   idle: { r: 59, g: 130, b: 246 },
   listening: { r: 239, g: 68, b: 68 },
   processing: { r: 245, g: 158, b: 11 },
+  speaking: { r: 167, g: 139, b: 250 },
+}
+
+function pickVoice(langCode) {
+  const voices = window.speechSynthesis.getVoices()
+  if (!voices.length || !langCode) return null
+  const lang = langCode.toLowerCase()
+  return voices.find((v) => v.lang.toLowerCase().startsWith(lang.split('-')[0])) || null
 }
 
 function getSupportedMimeType() {
@@ -46,9 +61,19 @@ function App() {
   const wsRef = useRef(null)
   const hadSpeechRef = useRef(false)
   const speechStartRef = useRef(null)
+  const langRef = useRef(null)
+  const speechQueueRef = useRef([])
+  const isSpeakingRef = useRef(false)
 
-  const stateKey = isRecording ? 'listening' : status === 'processing' ? 'processing' : 'idle'
+  const stateKey = isRecording ? 'listening' : status === 'speaking' ? 'speaking' : status === 'processing' ? 'processing' : 'idle'
   const accent = STATE_COLORS[stateKey]
+
+  useEffect(() => {
+    window.speechSynthesis.getVoices()
+    const onVoices = () => window.speechSynthesis.getVoices()
+    window.speechSynthesis.addEventListener('voiceschanged', onVoices)
+    return () => window.speechSynthesis.removeEventListener('voiceschanged', onVoices)
+  }, [])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -61,6 +86,43 @@ function App() {
     root.style.setProperty('--accent-b', accent.b)
   }, [accent])
 
+  const processQueue = useCallback(() => {
+    if (speechQueueRef.current.length === 0) {
+      isSpeakingRef.current = false
+      if (isActiveRef.current) {
+        startRecording()
+      } else {
+        setStatus('idle')
+      }
+      return
+    }
+    isSpeakingRef.current = true
+    setStatus('speaking')
+    const text = speechQueueRef.current.shift()
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.rate = 1.05
+    const langCode = langRef.current ? LANG_MAP[langRef.current] || langRef.current : null
+    if (langCode) {
+      utterance.lang = langCode
+      const voice = pickVoice(langCode)
+      if (voice) utterance.voice = voice
+    }
+    utterance.onend = () => processQueue()
+    utterance.onerror = () => processQueue()
+    window.speechSynthesis.speak(utterance)
+  }, [])
+
+  const speakSentence = useCallback((text) => {
+    speechQueueRef.current.push(text)
+    if (!isSpeakingRef.current) processQueue()
+  }, [processQueue])
+
+  const stopSpeaking = useCallback(() => {
+    window.speechSynthesis.cancel()
+    speechQueueRef.current = []
+    isSpeakingRef.current = false
+  }, [])
+
   const connectWS = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return
 
@@ -72,13 +134,17 @@ function App() {
 
       if (msg.type === 'transcript') {
         setMessages((prev) => [...prev, { role: 'user', text: msg.text }])
-        if (msg.language) setDetectedLang(msg.language)
+        if (msg.language) {
+          langRef.current = msg.language
+          setDetectedLang(msg.language)
+        }
         setStatus('processing')
         setStreamingReply('')
       }
 
       if (msg.type === 'reply_chunk') {
         setStreamingReply((prev) => prev + (prev ? ' ' : '') + msg.text)
+        speakSentence(msg.text)
       }
 
       if (msg.type === 'reply_done') {
@@ -87,10 +153,12 @@ function App() {
         if (msg.full_reply) {
           setMessages((prev) => [...prev, { role: 'assistant', text: msg.full_reply }])
         }
-        if (isActiveRef.current) {
-          startRecording()
-        } else {
-          setStatus('idle')
+        if (!isSpeakingRef.current) {
+          if (isActiveRef.current) {
+            startRecording()
+          } else {
+            setStatus('idle')
+          }
         }
       }
     }
@@ -184,6 +252,7 @@ function App() {
   }, [])
 
   const startRecording = useCallback(async () => {
+    stopSpeaking()
     setError(null)
     hadSpeechRef.current = false
     speechStartRef.current = null
@@ -263,6 +332,7 @@ function App() {
   const stopSession = useCallback(() => {
     isActiveRef.current = false
     setIsActive(false)
+    stopSpeaking()
     stopAudioAnalysis()
     if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
       mediaRecorder.current.stop()
@@ -270,7 +340,7 @@ function App() {
     setIsRecording(false)
     setStatus('idle')
     setStreamingReply('')
-  }, [stopAudioAnalysis])
+  }, [stopAudioAnalysis, stopSpeaking])
 
   const clearHistory = useCallback(() => {
     setMessages([])
@@ -287,6 +357,7 @@ function App() {
     idle: isActive ? 'READY' : 'TAP TO BEGIN',
     listening: 'LISTENING',
     processing: 'THINKING',
+    speaking: 'SPEAKING',
   }[status]
 
   return (

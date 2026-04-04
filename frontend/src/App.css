@@ -267,6 +267,15 @@
   50% { transform: scale(0.96); }
 }
 
+[data-state="speaking"] .orb {
+  animation: orb-speak 2.5s ease-in-out infinite;
+}
+
+@keyframes orb-speak {
+  0%, 100% { box-shadow: 0 0 40px -10px var(--accent-glow), inset 0 0 30px -10px var(--accent-dim); transform: scale(1); }
+  50% { box-shadow: 0 0 60px 0px var(--accent-glow), inset 0 0 40px -5px var(--accent-dim); transform: scale(1.02); }
+}
+
 /* ── Status ────────────────────────────────────── */
 
 .status-text {
