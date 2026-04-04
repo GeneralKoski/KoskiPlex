@@ -1,0 +1,144 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: #e0e0e0;
+}
+
+.subtitle {
+  color: #666;
+  margin: 0.25rem 0 2rem;
+  font-size: 0.9rem;
+}
+
+.status {
+  color: #888;
+  font-size: 0.85rem;
+  margin-bottom: 1.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.ptt-button {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 3px solid #333;
+  background: #1e1e2e;
+  color: #ccc;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.ptt-button:hover {
+  border-color: #555;
+  background: #252538;
+}
+
+.ptt-button.recording {
+  border-color: #e53e3e;
+  background: #2d1a1a;
+  color: #e53e3e;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(229, 62, 62, 0.4); }
+  50% { box-shadow: 0 0 0 20px rgba(229, 62, 62, 0); }
+}
+
+.controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 1.5rem;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #888;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.toggle input {
+  accent-color: #7c3aed;
+  cursor: pointer;
+}
+
+.clear-btn {
+  background: none;
+  border: 1px solid #333;
+  color: #888;
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.clear-btn:hover {
+  border-color: #555;
+  color: #ccc;
+}
+
+.error {
+  color: #e53e3e;
+  font-size: 0.85rem;
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  background: rgba(229, 62, 62, 0.1);
+  border-radius: 6px;
+}
+
+.conversation {
+  margin-top: 2rem;
+  width: 100%;
+  max-width: 500px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.message {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.user-msg {
+  background: #1e1e2e;
+  border: 1px solid #2a2a3a;
+  color: #ccc;
+}
+
+.ai-msg {
+  background: #1a1a2e;
+  border: 1px solid #2a2a4a;
+  color: #d4bfff;
+}
+
+.label {
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
