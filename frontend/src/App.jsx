@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import './App.css'
 
 const WS_URL = 'ws://localhost:8000/ws/voice'
+const API_URL = 'http://localhost:8000'
 const SILENCE_THRESHOLD = 50
 const SILENCE_DURATION = 1500
 const MIN_SPEECH_MS = 800
@@ -9,25 +10,11 @@ const VIZ_BARS = 64
 const VIZ_INNER_RADIUS = 88
 const VIZ_MAX_BAR = 50
 
-const LANG_MAP = {
-  english: 'en-US', italian: 'it-IT', spanish: 'es-ES', french: 'fr-FR',
-  german: 'de-DE', portuguese: 'pt-BR', dutch: 'nl-NL', russian: 'ru-RU',
-  japanese: 'ja-JP', chinese: 'zh-CN', korean: 'ko-KR', arabic: 'ar-SA',
-  hindi: 'hi-IN', turkish: 'tr-TR', polish: 'pl-PL', swedish: 'sv-SE',
-}
-
 const STATE_COLORS = {
   idle: { r: 59, g: 130, b: 246 },
   listening: { r: 239, g: 68, b: 68 },
   processing: { r: 245, g: 158, b: 11 },
   speaking: { r: 167, g: 139, b: 250 },
-}
-
-function pickVoice(langCode) {
-  const voices = window.speechSynthesis.getVoices()
-  if (!voices.length || !langCode) return null
-  const lang = langCode.toLowerCase()
-  return voices.find((v) => v.lang.toLowerCase().startsWith(lang.split('-')[0])) || null
 }
 
 function getSupportedMimeType() {
@@ -47,6 +34,12 @@ function App() {
   const [messages, setMessages] = useState([])
   const [timing, setTiming] = useState(null)
   const [streamingReply, setStreamingReply] = useState('')
+  const [voices, setVoices] = useState({ default: [], custom: [] })
+  const [showVoicePanel, setShowVoicePanel] = useState(false)
+  const [selectedVoice, setSelectedVoice] = useState(() => {
+    const saved = localStorage.getItem('koskiplex_voice')
+    return saved ? JSON.parse(saved) : { engine: 'edge', voice: '' }
+  })
 
   const mediaRecorder = useRef(null)
   const audioChunks = useRef([])
@@ -61,19 +54,13 @@ function App() {
   const wsRef = useRef(null)
   const hadSpeechRef = useRef(false)
   const speechStartRef = useRef(null)
-  const langRef = useRef(null)
-  const speechQueueRef = useRef([])
-  const isSpeakingRef = useRef(false)
+  const audioQueueRef = useRef([])
+  const isPlayingRef = useRef(false)
+  const currentAudioRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   const stateKey = isRecording ? 'listening' : status === 'speaking' ? 'speaking' : status === 'processing' ? 'processing' : 'idle'
   const accent = STATE_COLORS[stateKey]
-
-  useEffect(() => {
-    window.speechSynthesis.getVoices()
-    const onVoices = () => window.speechSynthesis.getVoices()
-    window.speechSynthesis.addEventListener('voiceschanged', onVoices)
-    return () => window.speechSynthesis.removeEventListener('voiceschanged', onVoices)
-  }, [])
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -86,9 +73,26 @@ function App() {
     root.style.setProperty('--accent-b', accent.b)
   }, [accent])
 
-  const processQueue = useCallback(() => {
-    if (speechQueueRef.current.length === 0) {
-      isSpeakingRef.current = false
+  useEffect(() => {
+    localStorage.setItem('koskiplex_voice', JSON.stringify(selectedVoice))
+  }, [selectedVoice])
+
+  const fetchVoices = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/voices`)
+      const data = await res.json()
+      setVoices(data)
+    } catch {}
+  }, [])
+
+  useEffect(() => { fetchVoices() }, [fetchVoices])
+
+  // ── Audio playback queue ───────────────────────
+
+  const playNext = useCallback(() => {
+    if (audioQueueRef.current.length === 0) {
+      isPlayingRef.current = false
+      currentAudioRef.current = null
       if (isActiveRef.current) {
         startRecording()
       } else {
@@ -96,32 +100,31 @@ function App() {
       }
       return
     }
-    isSpeakingRef.current = true
+    isPlayingRef.current = true
     setStatus('speaking')
-    const text = speechQueueRef.current.shift()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 1.05
-    const langCode = langRef.current ? LANG_MAP[langRef.current] || langRef.current : null
-    if (langCode) {
-      utterance.lang = langCode
-      const voice = pickVoice(langCode)
-      if (voice) utterance.voice = voice
+    const base64 = audioQueueRef.current.shift()
+    const audio = new Audio('data:audio/mp3;base64,' + base64)
+    currentAudioRef.current = audio
+    audio.onended = () => playNext()
+    audio.onerror = () => playNext()
+    audio.play().catch(() => playNext())
+  }, [])
+
+  const queueAudio = useCallback((base64) => {
+    audioQueueRef.current.push(base64)
+    if (!isPlayingRef.current) playNext()
+  }, [playNext])
+
+  const stopPlayback = useCallback(() => {
+    audioQueueRef.current = []
+    isPlayingRef.current = false
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause()
+      currentAudioRef.current = null
     }
-    utterance.onend = () => processQueue()
-    utterance.onerror = () => processQueue()
-    window.speechSynthesis.speak(utterance)
   }, [])
 
-  const speakSentence = useCallback((text) => {
-    speechQueueRef.current.push(text)
-    if (!isSpeakingRef.current) processQueue()
-  }, [processQueue])
-
-  const stopSpeaking = useCallback(() => {
-    window.speechSynthesis.cancel()
-    speechQueueRef.current = []
-    isSpeakingRef.current = false
-  }, [])
+  // ── WebSocket ──────────────────────────────────
 
   const connectWS = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return
@@ -129,22 +132,26 @@ function App() {
     const ws = new WebSocket(WS_URL)
     wsRef.current = ws
 
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'set_voice', ...selectedVoice }))
+    }
+
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data)
 
       if (msg.type === 'transcript') {
         setMessages((prev) => [...prev, { role: 'user', text: msg.text }])
-        if (msg.language) {
-          langRef.current = msg.language
-          setDetectedLang(msg.language)
-        }
+        if (msg.language) setDetectedLang(msg.language)
         setStatus('processing')
         setStreamingReply('')
       }
 
       if (msg.type === 'reply_chunk') {
         setStreamingReply((prev) => prev + (prev ? ' ' : '') + msg.text)
-        speakSentence(msg.text)
+      }
+
+      if (msg.type === 'audio_chunk') {
+        queueAudio(msg.data)
       }
 
       if (msg.type === 'reply_done') {
@@ -153,7 +160,7 @@ function App() {
         if (msg.full_reply) {
           setMessages((prev) => [...prev, { role: 'assistant', text: msg.full_reply }])
         }
-        if (!isSpeakingRef.current) {
+        if (!isPlayingRef.current && audioQueueRef.current.length === 0) {
           if (isActiveRef.current) {
             startRecording()
           } else {
@@ -165,7 +172,16 @@ function App() {
 
     ws.onclose = () => { wsRef.current = null }
     ws.onerror = () => { setError('Connection failed') }
+  }, [selectedVoice, queueAudio])
+
+  const sendVoiceSetting = useCallback((setting) => {
+    setSelectedVoice(setting)
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'set_voice', ...setting }))
+    }
   }, [])
+
+  // ── Visualizer ─────────────────────────────────
 
   const startVisualizer = useCallback(() => {
     const canvas = canvasRef.current
@@ -232,6 +248,8 @@ function App() {
     }
   }, [stopAudioAnalysis])
 
+  // ── Recording ──────────────────────────────────
+
   const sendAudio = useCallback((blob) => {
     const ws = wsRef.current
     if (!ws || ws.readyState !== WebSocket.OPEN) return
@@ -252,7 +270,7 @@ function App() {
   }, [])
 
   const startRecording = useCallback(async () => {
-    stopSpeaking()
+    stopPlayback()
     setError(null)
     hadSpeechRef.current = false
     speechStartRef.current = null
@@ -278,9 +296,7 @@ function App() {
       }
       recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop())
-        const speechDuration = speechStartRef.current
-          ? Date.now() - speechStartRef.current
-          : 0
+        const speechDuration = speechStartRef.current ? Date.now() - speechStartRef.current : 0
         if (hadSpeechRef.current && speechDuration >= MIN_SPEECH_MS) {
           const blob = new Blob(audioChunks.current, { type: recorder.mimeType })
           sendAudio(blob)
@@ -320,19 +336,19 @@ function App() {
       setError('Microphone access denied')
       setStatus('idle')
     }
-  }, [sendAudio, startVisualizer, stopRecordingRaw])
+  }, [sendAudio, startVisualizer, stopRecordingRaw, stopPlayback])
 
   const startSession = useCallback(() => {
     isActiveRef.current = true
     setIsActive(true)
     connectWS()
-    setTimeout(() => startRecording(), 100)
+    setTimeout(() => startRecording(), 150)
   }, [connectWS, startRecording])
 
   const stopSession = useCallback(() => {
     isActiveRef.current = false
     setIsActive(false)
-    stopSpeaking()
+    stopPlayback()
     stopAudioAnalysis()
     if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
       mediaRecorder.current.stop()
@@ -340,7 +356,7 @@ function App() {
     setIsRecording(false)
     setStatus('idle')
     setStreamingReply('')
-  }, [stopAudioAnalysis, stopSpeaking])
+  }, [stopAudioAnalysis, stopPlayback])
 
   const clearHistory = useCallback(() => {
     setMessages([])
@@ -352,6 +368,38 @@ function App() {
       wsRef.current.send(JSON.stringify({ type: 'clear' }))
     }
   }, [])
+
+  // ── Voice upload ───────────────────────────────
+
+  const handleVoiceUpload = useCallback(async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const name = prompt('Voice name:')
+    if (!name) return
+
+    const formData = new FormData()
+    formData.append('name', name)
+    formData.append('file', file)
+
+    try {
+      await fetch(`${API_URL}/voices/upload`, { method: 'POST', body: formData })
+      fetchVoices()
+    } catch {
+      setError('Upload failed')
+    }
+    e.target.value = ''
+  }, [fetchVoices])
+
+  const deleteVoice = useCallback(async (name) => {
+    try {
+      await fetch(`${API_URL}/voices/${name}`, { method: 'DELETE' })
+      fetchVoices()
+      if (selectedVoice.voice === name) {
+        sendVoiceSetting({ engine: 'edge', voice: '' })
+      }
+    } catch {}
+  }, [fetchVoices, selectedVoice, sendVoiceSetting])
 
   const statusLabel = {
     idle: isActive ? 'READY' : 'TAP TO BEGIN',
@@ -419,7 +467,52 @@ function App() {
         )}
       </main>
 
+      {showVoicePanel && (
+        <div className="voice-panel">
+          <div className="voice-panel-header">
+            <span className="voice-panel-title">Voices</span>
+            <button className="voice-panel-close" onClick={() => setShowVoicePanel(false)}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+
+          <div className="voice-section">
+            <span className="voice-section-label">Default</span>
+            <div className="voice-option" onClick={() => sendVoiceSetting({ engine: 'edge', voice: '' })}>
+              <span className={`voice-radio ${selectedVoice.engine === 'edge' && !selectedVoice.voice ? 'active' : ''}`} />
+              <span className="voice-name">Auto (by language)</span>
+            </div>
+          </div>
+
+          {voices.custom.length > 0 && (
+            <div className="voice-section">
+              <span className="voice-section-label">Custom</span>
+              {voices.custom.map((v) => (
+                <div key={v.name} className="voice-option">
+                  <div className="voice-option-main" onClick={() => sendVoiceSetting({ engine: 'xtts', voice: v.name })}>
+                    <span className={`voice-radio ${selectedVoice.engine === 'xtts' && selectedVoice.voice === v.name ? 'active' : ''}`} />
+                    <span className="voice-name">{v.name}</span>
+                  </div>
+                  <button className="voice-delete" onClick={() => deleteVoice(v.name)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <button className="voice-upload-btn" onClick={() => fileInputRef.current?.click()}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload voice sample
+          </button>
+          <input ref={fileInputRef} type="file" accept=".wav,.mp3,.m4a" hidden onChange={handleVoiceUpload} />
+        </div>
+      )}
+
       <footer className="controls">
+        <button className="ctrl-btn" onClick={() => { setShowVoicePanel((p) => !p); fetchVoices() }} title="Voice settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+        </button>
         <button className="ctrl-btn" onClick={clearHistory} title="Clear conversation">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
         </button>
