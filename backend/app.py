@@ -32,6 +32,13 @@ SYSTEM_PROMPT = (
     "Respond in the same language the user speaks to you."
 )
 MAX_HISTORY = 20
+WHISPER_HALLUCINATIONS = {
+    "thank you", "thanks", "thank you.", "thanks.", "thank you for watching",
+    "thanks for watching", "thank you for watching.", "thanks for watching.",
+    "like and subscribe", "subscribe", "bye", "bye.", "you",
+    "the end", "the end.", "...", "", " ",
+}
+
 
 
 class ChatRequest(BaseModel):
@@ -99,6 +106,10 @@ async def ws_voice(ws: WebSocket):
                 t_start = time.perf_counter()
 
                 stt_result = await transcribe_audio(audio_bytes, f"recording.{ext}")
+
+                if stt_result["text"].strip().lower() in WHISPER_HALLUCINATIONS:
+                    await ws.send_json({"type": "reply_done", "full_reply": "", "language": stt_result["language"], "timing": {"stt_ms": stt_result["stt_ms"], "llm_first_token_ms": 0, "llm_total_ms": 0, "total_ms": stt_result["stt_ms"]}, "interrupted": False})
+                    continue
 
                 await ws.send_json({
                     "type": "transcript",

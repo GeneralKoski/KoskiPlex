@@ -2,8 +2,9 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import './App.css'
 
 const WS_URL = 'ws://localhost:8000/ws/voice'
-const SILENCE_THRESHOLD = 15
+const SILENCE_THRESHOLD = 30
 const SILENCE_DURATION = 1500
+const MIN_SPEECH_MS = 500
 const VIZ_BARS = 64
 const VIZ_INNER_RADIUS = 88
 const VIZ_MAX_BAR = 50
@@ -44,6 +45,7 @@ function App() {
   const chatEndRef = useRef(null)
   const wsRef = useRef(null)
   const hadSpeechRef = useRef(false)
+  const speechStartRef = useRef(null)
 
   const stateKey = isRecording ? 'listening' : status === 'processing' ? 'processing' : 'idle'
   const accent = STATE_COLORS[stateKey]
@@ -184,6 +186,7 @@ function App() {
   const startRecording = useCallback(async () => {
     setError(null)
     hadSpeechRef.current = false
+    speechStartRef.current = null
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -206,7 +209,10 @@ function App() {
       }
       recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop())
-        if (hadSpeechRef.current) {
+        const speechDuration = speechStartRef.current
+          ? Date.now() - speechStartRef.current
+          : 0
+        if (hadSpeechRef.current && speechDuration >= MIN_SPEECH_MS) {
           const blob = new Blob(audioChunks.current, { type: recorder.mimeType })
           sendAudio(blob)
         } else if (isActiveRef.current) {
@@ -228,6 +234,7 @@ function App() {
         const avg = dataArray.reduce((sum, v) => sum + v, 0) / dataArray.length
 
         if (avg >= SILENCE_THRESHOLD) {
+          if (!hadSpeechRef.current) speechStartRef.current = Date.now()
           hadSpeechRef.current = true
           silentSince = null
         } else if (hadSpeechRef.current) {
