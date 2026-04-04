@@ -1,8 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import './App.css'
 
-const API_URL = 'http://localhost:8000'
-const MAX_HISTORY = 20
+const WS_URL = 'ws://localhost:8000/ws/voice'
 const SILENCE_THRESHOLD = 15
 const SILENCE_DURATION = 1500
 const VIZ_BARS = 64
@@ -44,8 +43,8 @@ function pickVoice(langCode) {
 function getStateKey(isConversing, isRecording, isMuted, status) {
   if (isMuted) return 'muted'
   if (isRecording) return 'listening'
-  if (status === 'Processing...') return 'processing'
-  if (status === 'Speaking...') return 'speaking'
+  if (status === 'processing') return 'processing'
+  if (status === 'speaking') return 'speaking'
   return 'idle'
 }
 
@@ -54,16 +53,14 @@ function App() {
   const [isConversing, setIsConversing] = useState(false)
   const [isPTT, setIsPTT] = useState(false)
   const [isMuted, setIsMuted] = useState(false)
-  const [transcript, setTranscript] = useState('')
-  const [reply, setReply] = useState('')
-  const [status, setStatus] = useState('Ready')
+  const [status, setStatus] = useState('idle')
   const [error, setError] = useState(null)
   const [detectedLang, setDetectedLang] = useState(null)
   const [messages, setMessages] = useState([])
+  const [timing, setTiming] = useState(null)
 
   const mediaRecorder = useRef(null)
   const audioChunks = useRef([])
-  const history = useRef([])
   const isConversingRef = useRef(false)
   const isMutedRef = useRef(false)
   const streamRef = useRef(null)
@@ -74,6 +71,9 @@ function App() {
   const canvasRef = useRef(null)
   const vizFrameRef = useRef(null)
   const chatEndRef = useRef(null)
+  const wsRef = useRef(null)
+  const speechQueueRef = useRef([])
+  const isSpeakingRef = useRef(false)
 
   const stateKey = getStateKey(isConversing, isRecording, isMuted, status)
   const accent = STATE_COLORS[stateKey]
@@ -95,6 +95,89 @@ function App() {
     root.style.setProperty('--accent-g', accent.g)
     root.style.setProperty('--accent-b', accent.b)
   }, [accent])
+
+  const connectWS = useCallback(() => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return
+
+    const ws = new WebSocket(WS_URL)
+    wsRef.current = ws
+
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data)
+
+      if (msg.type === 'transcript') {
+        setMessages((prev) => [...prev, { role: 'user', text: msg.text }])
+        if (msg.language) {
+          langRef.current = msg.language
+          setDetectedLang(msg.language)
+        }
+        setStatus('processing')
+      }
+
+      if (msg.type === 'reply_chunk') {
+        speakSentence(msg.text)
+      }
+
+      if (msg.type === 'reply_done') {
+        setTiming(msg.timing)
+        if (msg.full_reply) {
+          setMessages((prev) => [...prev, { role: 'assistant', text: msg.full_reply }])
+        }
+      }
+    }
+
+    ws.onclose = () => {
+      wsRef.current = null
+    }
+
+    ws.onerror = () => {
+      setError('WebSocket connection failed')
+    }
+
+    return ws
+  }, [])
+
+  const speakSentence = useCallback((text) => {
+    speechQueueRef.current.push(text)
+    if (!isSpeakingRef.current) {
+      processQueue()
+    }
+  }, [])
+
+  const processQueue = useCallback(() => {
+    if (speechQueueRef.current.length === 0) {
+      isSpeakingRef.current = false
+      if (isConversingRef.current && !isMutedRef.current) {
+        startRecording()
+      } else {
+        setStatus(isConversingRef.current ? 'muted' : 'idle')
+      }
+      return
+    }
+
+    isSpeakingRef.current = true
+    setStatus('speaking')
+    const text = speechQueueRef.current.shift()
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.rate = 1.05
+
+    const langCode = langRef.current ? LANG_MAP[langRef.current] || langRef.current : null
+    if (langCode) {
+      utterance.lang = langCode
+      const voice = pickVoice(langCode)
+      if (voice) utterance.voice = voice
+    }
+
+    utterance.onend = () => processQueue()
+    utterance.onerror = () => processQueue()
+    window.speechSynthesis.speak(utterance)
+  }, [])
+
+  const stopSpeaking = useCallback(() => {
+    window.speechSynthesis.cancel()
+    speechQueueRef.current = []
+    isSpeakingRef.current = false
+  }, [])
 
   const startVisualizer = useCallback(() => {
     const canvas = canvasRef.current
@@ -161,78 +244,6 @@ function App() {
     }
   }, [stopVisualizer])
 
-  const speakReply = useCallback((text) => {
-    window.speechSynthesis.cancel()
-    const utterance = new SpeechSynthesisUtterance(text)
-    utterance.rate = 1.05
-
-    const langCode = langRef.current ? LANG_MAP[langRef.current] || langRef.current : null
-    if (langCode) {
-      utterance.lang = langCode
-      const voice = pickVoice(langCode)
-      if (voice) utterance.voice = voice
-    }
-
-    utterance.onstart = () => setStatus('Speaking...')
-    utterance.onend = () => {
-      if (isConversingRef.current && !isMutedRef.current) {
-        startRecording()
-      } else {
-        setStatus(isConversingRef.current ? 'Muted' : 'Ready')
-      }
-    }
-    window.speechSynthesis.speak(utterance)
-  }, [])
-
-  const handleAudioReady = useCallback(async (blob) => {
-    setStatus('Processing...')
-    setError(null)
-
-    const formData = new FormData()
-    const ext = blob.type.includes('mp4') ? 'mp4' : 'webm'
-    formData.append('file', blob, `recording.${ext}`)
-    formData.append('history', JSON.stringify(history.current))
-
-    try {
-      const res = await fetch(`${API_URL}/voice`, {
-        method: 'POST',
-        body: formData,
-      })
-
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || 'Request failed')
-      }
-
-      const data = await res.json()
-      setTranscript(data.transcript)
-      setReply(data.reply)
-      setMessages((prev) => [
-        ...prev,
-        { role: 'user', text: data.transcript },
-        { role: 'assistant', text: data.reply },
-      ])
-
-      if (data.language) {
-        langRef.current = data.language
-        setDetectedLang(data.language)
-      }
-
-      history.current.push(
-        { role: 'user', content: data.transcript },
-        { role: 'assistant', content: data.reply }
-      )
-      if (history.current.length > MAX_HISTORY) {
-        history.current = history.current.slice(-MAX_HISTORY)
-      }
-
-      speakReply(data.reply)
-    } catch (err) {
-      setError(err.message)
-      setStatus(isConversingRef.current ? 'Listening...' : 'Ready')
-    }
-  }, [speakReply])
-
   const stopRecording = useCallback(() => {
     stopAudioAnalysis()
     if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
@@ -268,9 +279,35 @@ function App() {
     silenceCheckRef.current = requestAnimationFrame(check)
   }, [stopRecording])
 
+  const sendAudio = useCallback((blob) => {
+    const ws = wsRef.current
+    if (!ws || ws.readyState !== WebSocket.OPEN) return
+
+    setStatus('processing')
+
+    const reader = new FileReader()
+    reader.onloadend = () => {
+      const arrayBuffer = reader.result
+      const hex = Array.from(new Uint8Array(arrayBuffer))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('')
+
+      ws.send(JSON.stringify({
+        type: 'audio',
+        data: hex,
+        ext: blob.type.includes('mp4') ? 'mp4' : 'webm',
+      }))
+    }
+    reader.readAsArrayBuffer(blob)
+  }, [])
+
   const startRecording = useCallback(async () => {
-    window.speechSynthesis.cancel()
+    stopSpeaking()
     setError(null)
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'interrupt' }))
+    }
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
@@ -294,13 +331,13 @@ function App() {
       recorder.onstop = () => {
         stream.getTracks().forEach((t) => t.stop())
         const blob = new Blob(audioChunks.current, { type: recorder.mimeType })
-        handleAudioReady(blob)
+        sendAudio(blob)
       }
 
       recorder.start()
       mediaRecorder.current = recorder
       setIsRecording(true)
-      setStatus('Listening...')
+      setStatus('listening')
 
       startVisualizer()
 
@@ -309,27 +346,30 @@ function App() {
       }
     } catch (err) {
       setError('Microphone access denied')
-      setStatus('Ready')
+      setStatus('idle')
     }
-  }, [handleAudioReady, startSilenceDetection, startVisualizer, isPTT])
+  }, [sendAudio, startSilenceDetection, startVisualizer, stopSpeaking, isPTT])
 
   const startConversation = useCallback(() => {
-    isConversingRef.current = true
-    setIsConversing(true)
-    startRecording()
-  }, [startRecording])
+    connectWS()
+    setTimeout(() => {
+      isConversingRef.current = true
+      setIsConversing(true)
+      startRecording()
+    }, 100)
+  }, [connectWS, startRecording])
 
   const stopConversation = useCallback(() => {
     isConversingRef.current = false
     setIsConversing(false)
-    window.speechSynthesis.cancel()
+    stopSpeaking()
     stopAudioAnalysis()
     if (mediaRecorder.current && mediaRecorder.current.state === 'recording') {
       mediaRecorder.current.stop()
     }
     setIsRecording(false)
-    setStatus('Ready')
-  }, [stopAudioAnalysis])
+    setStatus('idle')
+  }, [stopAudioAnalysis, stopSpeaking])
 
   const toggleMute = useCallback(() => {
     setIsMuted((prev) => {
@@ -341,7 +381,7 @@ function App() {
           mediaRecorder.current.stop()
         }
         setIsRecording(false)
-        setStatus('Muted')
+        setStatus('muted')
       } else if (isConversingRef.current) {
         startRecording()
       }
@@ -350,21 +390,22 @@ function App() {
   }, [stopAudioAnalysis, startRecording])
 
   const clearHistory = useCallback(() => {
-    history.current = []
-    setTranscript('')
-    setReply('')
     setMessages([])
     setError(null)
     setDetectedLang(null)
+    setTiming(null)
     langRef.current = null
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({ type: 'clear' }))
+    }
   }, [])
 
   const statusLabel = {
-    'Ready': 'TAP TO BEGIN',
-    'Listening...': 'LISTENING',
-    'Processing...': 'THINKING',
-    'Speaking...': 'SPEAKING',
-    'Muted': 'MUTED',
+    idle: 'TAP TO BEGIN',
+    listening: 'LISTENING',
+    processing: 'THINKING',
+    speaking: 'SPEAKING',
+    muted: 'MUTED',
   }[status] || status.toUpperCase()
 
   return (
@@ -375,13 +416,19 @@ function App() {
 
       <header className="header">
         <h1 className="logo">KOSKI<span className="logo-accent">PLEX</span></h1>
-        {detectedLang && <span className="lang-pill">{detectedLang}</span>}
+        <div className="header-badges">
+          {detectedLang && <span className="lang-pill">{detectedLang}</span>}
+          {timing && (
+            <span className="timing-pill">
+              STT {timing.stt_ms}ms &middot; LLM {timing.llm_first_token_ms}ms &middot; Total {timing.total_ms}ms
+            </span>
+          )}
+        </div>
       </header>
 
       <main className="main">
         <div className="orb-area">
           <canvas ref={canvasRef} className="viz-canvas" width="320" height="320" />
-
           <div className="orb-rings">
             <div className="ring ring-1" />
             <div className="ring ring-2" />
@@ -391,9 +438,9 @@ function App() {
           {isPTT ? (
             <button
               className="orb"
-              onMouseDown={startRecording}
+              onMouseDown={() => { connectWS(); setTimeout(startRecording, 50) }}
               onMouseUp={stopRecording}
-              onTouchStart={(e) => { e.preventDefault(); startRecording() }}
+              onTouchStart={(e) => { e.preventDefault(); connectWS(); setTimeout(startRecording, 50) }}
               onTouchEnd={(e) => { e.preventDefault(); stopRecording() }}
             />
           ) : (
@@ -405,7 +452,6 @@ function App() {
         </div>
 
         <p className="status-text">{statusLabel}</p>
-
         {error && <p className="error-text">{error}</p>}
 
         {messages.length > 0 && (

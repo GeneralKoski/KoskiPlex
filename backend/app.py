@@ -1,8 +1,10 @@
+import asyncio
 import json
+import time
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, UploadFile
+from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 from pydantic import BaseModel
@@ -26,7 +28,8 @@ LLM_MODEL = "llama-3.3-70b-versatile"
 SYSTEM_PROMPT = (
     "You are KoskiPlex, a fast voice assistant. "
     "Always respond in 1-2 short sentences. Be direct and concise. "
-    "Never use lists, markdown, or formatting — you are being read aloud."
+    "Never use lists, markdown, or formatting — you are being read aloud. "
+    "Respond in the same language the user speaks to you."
 )
 MAX_HISTORY = 20
 
@@ -37,25 +40,150 @@ class ChatRequest(BaseModel):
 
 
 async def transcribe_audio(audio_bytes: bytes, filename: str) -> dict:
+    t0 = time.perf_counter()
     transcription = client.audio.transcriptions.create(
         model=STT_MODEL,
         file=(filename, audio_bytes),
         response_format="verbose_json",
     )
-    return {"text": transcription.text, "language": transcription.language}
+    stt_ms = round((time.perf_counter() - t0) * 1000)
+    return {
+        "text": transcription.text,
+        "language": transcription.language,
+        "stt_ms": stt_ms,
+    }
 
 
-def get_llm_reply(user_text: str, history: list[dict]) -> str:
+def get_llm_reply(user_text: str, history: list[dict]) -> dict:
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(history[-MAX_HISTORY:])
     messages.append({"role": "user", "content": user_text})
 
+    t0 = time.perf_counter()
     completion = client.chat.completions.create(
         model=LLM_MODEL,
         messages=messages,
     )
-    return completion.choices[0].message.content
+    llm_ms = round((time.perf_counter() - t0) * 1000)
+    return {"text": completion.choices[0].message.content, "llm_ms": llm_ms}
 
+
+def stream_llm_reply(user_text: str, history: list[dict]):
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages.extend(history[-MAX_HISTORY:])
+    messages.append({"role": "user", "content": user_text})
+
+    return client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=messages,
+        stream=True,
+    )
+
+
+# ── WebSocket voice endpoint ──────────────────────
+
+@app.websocket("/ws/voice")
+async def ws_voice(ws: WebSocket):
+    await ws.accept()
+    history = []
+    interrupted = False
+
+    try:
+        while True:
+            msg = await ws.receive_json()
+
+            if msg["type"] == "audio":
+                interrupted = False
+                audio_bytes = bytes.fromhex(msg["data"])
+                ext = msg.get("ext", "webm")
+                t_start = time.perf_counter()
+
+                stt_result = await transcribe_audio(audio_bytes, f"recording.{ext}")
+
+                await ws.send_json({
+                    "type": "transcript",
+                    "text": stt_result["text"],
+                    "language": stt_result["language"],
+                    "stt_ms": stt_result["stt_ms"],
+                })
+
+                stream = stream_llm_reply(stt_result["text"], history)
+                full_reply = ""
+                sentence_buffer = ""
+                first_token_ms = None
+                t_llm_start = time.perf_counter()
+
+                for chunk in stream:
+                    if interrupted:
+                        stream.close()
+                        break
+
+                    token = chunk.choices[0].delta.content or ""
+                    if not token:
+                        continue
+
+                    if first_token_ms is None:
+                        first_token_ms = round((time.perf_counter() - t_llm_start) * 1000)
+
+                    full_reply += token
+                    sentence_buffer += token
+
+                    if any(sentence_buffer.rstrip().endswith(p) for p in ['.', '!', '?', '。', '！', '？']):
+                        await ws.send_json({
+                            "type": "reply_chunk",
+                            "text": sentence_buffer.strip(),
+                        })
+                        sentence_buffer = ""
+
+                    try:
+                        raw = await asyncio.wait_for(ws.receive_text(), timeout=0.001)
+                        peek = json.loads(raw)
+                        if peek.get("type") == "interrupt":
+                            interrupted = True
+                            stream.close()
+                            break
+                    except (asyncio.TimeoutError, Exception):
+                        pass
+
+                if sentence_buffer.strip() and not interrupted:
+                    await ws.send_json({
+                        "type": "reply_chunk",
+                        "text": sentence_buffer.strip(),
+                    })
+
+                total_ms = round((time.perf_counter() - t_start) * 1000)
+                llm_ms = round((time.perf_counter() - t_llm_start) * 1000)
+
+                await ws.send_json({
+                    "type": "reply_done",
+                    "full_reply": full_reply.strip(),
+                    "language": stt_result["language"],
+                    "timing": {
+                        "stt_ms": stt_result["stt_ms"],
+                        "llm_first_token_ms": first_token_ms or 0,
+                        "llm_total_ms": llm_ms,
+                        "total_ms": total_ms,
+                    },
+                    "interrupted": interrupted,
+                })
+
+                if not interrupted:
+                    history.append({"role": "user", "content": stt_result["text"]})
+                    history.append({"role": "assistant", "content": full_reply.strip()})
+                    if len(history) > MAX_HISTORY:
+                        history = history[-MAX_HISTORY:]
+
+            elif msg["type"] == "interrupt":
+                interrupted = True
+
+            elif msg["type"] == "clear":
+                history = []
+
+    except WebSocketDisconnect:
+        pass
+
+
+# ── HTTP endpoints (kept for compatibility) ───────
 
 @app.get("/health")
 async def health():
@@ -71,8 +199,8 @@ async def transcribe(file: UploadFile = File(...)):
 
 @app.post("/chat")
 async def chat(req: ChatRequest):
-    reply = get_llm_reply(req.text, req.history)
-    return {"reply": reply}
+    result = get_llm_reply(req.text, req.history)
+    return {"reply": result["text"], "llm_ms": result["llm_ms"]}
 
 
 @app.post("/voice")
@@ -84,12 +212,16 @@ async def voice(
     parsed_history = json.loads(history)
 
     stt_result = await transcribe_audio(audio_bytes, file.filename)
-    reply = get_llm_reply(stt_result["text"], parsed_history)
+    llm_result = get_llm_reply(stt_result["text"], parsed_history)
 
     return {
         "transcript": stt_result["text"],
-        "reply": reply,
+        "reply": llm_result["text"],
         "language": stt_result["language"],
+        "timing": {
+            "stt_ms": stt_result["stt_ms"],
+            "llm_ms": llm_result["llm_ms"],
+        },
     }
 
 
