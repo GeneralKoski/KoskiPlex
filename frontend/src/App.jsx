@@ -2,9 +2,9 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import './App.css'
 
 const WS_URL = 'ws://localhost:8000/ws/voice'
-const SILENCE_THRESHOLD = 30
+const SILENCE_THRESHOLD = 50
 const SILENCE_DURATION = 1500
-const MIN_SPEECH_MS = 500
+const MIN_SPEECH_MS = 800
 const VIZ_BARS = 64
 const VIZ_INNER_RADIUS = 88
 const VIZ_MAX_BAR = 50
