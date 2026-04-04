@@ -8,6 +8,12 @@ Low-latency voice AI prototype powered by Groq. Speak → transcribe → LLM rep
 - **Frontend**: React (Vite) — MediaRecorder for mic capture, Web Speech API for instant TTS
 - **Latency**: Groq inference (~200ms) + browser-native TTS (zero network latency)
 
+## Prerequisites
+
+- Python 3.10+
+- Node.js 18+
+- A Groq API key from [console.groq.com](https://console.groq.com)
+
 ## Quick Start
 
 ### 1. Backend
@@ -18,7 +24,17 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env with your GROQ_API_KEY from https://console.groq.com
+```
+
+Edit `backend/.env` and add your Groq API key:
+
+```
+GROQ_API_KEY=gsk_your_actual_key_here
+```
+
+Start the server:
+
+```bash
 python app.py
 ```
 
@@ -36,7 +52,20 @@ Frontend runs on `http://localhost:5173`.
 
 ### 3. Use it
 
-Open `http://localhost:5173`, hold the button, speak, release, and hear the reply.
+1. Open `http://localhost:5173`
+2. **Hold** the button and speak
+3. **Release** to send — you'll see your transcript and hear the AI reply
+4. Press the button while the AI is speaking to **interrupt** it
+5. Toggle **Auto-Voice** for continuous hands-free conversation
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/health` | GET | Healthcheck |
+| `/transcribe` | POST | Speech-to-text only (accepts audio file) |
+| `/chat` | POST | LLM chat only (accepts JSON with text + history) |
+| `/voice` | POST | Full pipeline: audio → STT → LLM → text reply |
 
 ## TTS Options
 
