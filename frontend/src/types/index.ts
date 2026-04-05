@@ -24,6 +24,7 @@ export interface VoicesState {
 export interface SelectedVoice {
   engine: "edge" | "xtts";
   voice: string;
+  lang: string;
 }
 
 export interface WSMessage {

@@ -14,9 +14,13 @@ import { SelectedVoice } from "../types";
 
 interface PracticePanelProps {
   selectedVoice: SelectedVoice;
+  onVoiceCreated?: () => void;
 }
 
-const PracticePanel: React.FC<PracticePanelProps> = ({ selectedVoice }) => {
+const PracticePanel: React.FC<PracticePanelProps> = ({
+  selectedVoice,
+  onVoiceCreated,
+}) => {
   const [phrase, setPhrase] = useState("");
   const [isFetchingPhrase, setIsFetchingPhrase] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -38,7 +42,9 @@ const PracticePanel: React.FC<PracticePanelProps> = ({ selectedVoice }) => {
   const fetchPhrase = useCallback(async () => {
     setIsFetchingPhrase(true);
     try {
-      const res = await fetch(`${API_URL}/practice/phrase`);
+      const res = await fetch(
+        `${API_URL}/practice/phrase?lang=${selectedVoice.lang}`,
+      );
       const data = await res.json();
       if (data.phrase) setPhrase(data.phrase);
     } catch (err) {
@@ -46,7 +52,7 @@ const PracticePanel: React.FC<PracticePanelProps> = ({ selectedVoice }) => {
     } finally {
       setIsFetchingPhrase(false);
     }
-  }, []);
+  }, [selectedVoice.lang]);
 
   useEffect(() => {
     if (!hasFetchedRef.current) {
@@ -103,7 +109,7 @@ const PracticePanel: React.FC<PracticePanelProps> = ({ selectedVoice }) => {
       referenceAudioRef.current.pause();
     }
 
-    const url = `${API_URL}/practice/reference?text=${encodeURIComponent(phrase)}&engine=${selectedVoice.engine}&voice=${encodeURIComponent(selectedVoice.voice)}&lang=it`;
+    const url = `${API_URL}/practice/reference?text=${encodeURIComponent(phrase)}&engine=${selectedVoice.engine}&voice=${encodeURIComponent(selectedVoice.voice)}&lang=${selectedVoice.lang}`;
 
     const audio = new Audio(url);
     referenceAudioRef.current = audio;
@@ -157,6 +163,8 @@ const PracticePanel: React.FC<PracticePanelProps> = ({ selectedVoice }) => {
 
       setSaveStatus("success");
       setVoiceName("");
+      if (onVoiceCreated) onVoiceCreated();
+
       // Reset after 3 seconds
       setTimeout(() => setSaveStatus("idle"), 3000);
     } catch (err) {

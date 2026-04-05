@@ -1401,8 +1401,142 @@
 
 /* ── UI Polish & Utilities ─────────────────────── */
 
+.flex { display: flex; }
+.flex-col { display: flex; flex-direction: column; }
+.items-center { align-items: center; }
+.justify-center { justify-content: center; }
+.gap-1 { gap: 4px; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+
+.view-container {
+  overflow-y: auto !important;
+  height: 100vh;
+}
+
+.practice-panel, .settings-view {
+  margin-bottom: 140px !important; /* Local margin to clear navbar */
+}
+
+.voice-badge {
+  font-size: 0.55rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+  margin-left: 8px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.05em;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.voice-badge.clone {
+  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.3);
+  box-shadow: 0 0 10px -2px var(--accent-glow);
+}
+
 .uploader-area {
   margin-top: 2rem;
+}
+
+/* ── Settings Split Layout ───────────────────── */
+
+.settings-container-split {
+  display: flex;
+  gap: 3rem;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  align-items: flex-start;
+}
+
+.settings-sidebar {
+  flex: 0 0 320px;
+  position: sticky;
+  top: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.settings-content-scrollable {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 24px;
+  padding: 1.5rem;
+  max-height: 75vh;
+  overflow-y: auto;
+  backdrop-filter: blur(10px);
+}
+
+.settings-content-scrollable::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings-content-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.voice-list-unified {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.uploader-capsule-compact {
+  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.05);
+  border: 2px dashed rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.2);
+  border-radius: 20px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.uploader-capsule-compact:hover {
+  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.08);
+  border-color: var(--accent);
+  box-shadow: 0 0 30px -10px var(--accent-glow);
+}
+
+.uploader-btn-fake {
+  margin-top: 8px;
+  background: var(--accent);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 900px) {
+  .settings-container-split {
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .settings-sidebar {
+    flex: none;
+    width: 100%;
+    position: static;
+  }
+
+  .settings-content-scrollable {
+    max-height: none;
+    overflow: visible;
+  }
 }
 
 .uploader-capsule {

@@ -52,7 +52,9 @@ function App() {
 
   const [selectedVoice, setSelectedVoice] = useState<SelectedVoice>(() => {
     const saved = localStorage.getItem("koskiplex_voice");
-    return saved ? JSON.parse(saved) : { engine: "edge", voice: "" };
+    return saved
+      ? JSON.parse(saved)
+      : { engine: "edge", voice: "", lang: "it" };
   });
 
   // --- Refs ---
@@ -230,7 +232,7 @@ function App() {
         await fetch(`${API_URL}/voices/${name}`, { method: "DELETE" });
         fetchVoices();
         if (selectedVoice.voice === name) {
-          setSelectedVoice({ engine: "edge", voice: "" });
+          setSelectedVoice({ engine: "edge", voice: "", lang: "it" });
         }
       } catch (err) {
         console.error("Delete failed", err);
@@ -315,7 +317,7 @@ function App() {
                         transition={{ duration: 0.2 }}
                       >
                         <span className="status-text">{statusLabel}</span>
-                          <p className="error-text">{error}</p>
+                        <p className="error-text">{error}</p>
                       </motion.div>
                     </AnimatePresence>
                   </div>
@@ -337,7 +339,10 @@ function App() {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.3 }}
             >
-              <PracticePanel selectedVoice={selectedVoice} />
+              <PracticePanel
+                selectedVoice={selectedVoice}
+                onVoiceCreated={fetchVoices}
+              />
             </motion.div>
           )}
 
