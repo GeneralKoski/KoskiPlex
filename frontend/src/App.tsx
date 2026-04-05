@@ -62,7 +62,8 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Custom Hooks ---
-  const { queueAudio, stopPlayback, analyser, isPlaying } = useAudioContext();
+  const { initAudioContext, queueAudio, stopPlayback, analyser, isPlaying } =
+    useAudioContext();
 
   const handleStatusChange = useCallback(
     (newStatus: AppStatus, errMsg?: string) => {
@@ -176,8 +177,9 @@ function App() {
     isActiveRef.current = true;
     setIsActive(true);
     setError(null);
+    initAudioContext();
     startRecording();
-  }, [startRecording]);
+  }, [startRecording, initAudioContext]);
 
   const stopSession = useCallback(() => {
     isActiveRef.current = false;

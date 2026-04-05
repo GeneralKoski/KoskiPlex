@@ -29,11 +29,17 @@ export function useVoiceRecorder({
   const hadSpeechRef = useRef(false);
   const speechStartRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
   const stopRecording = useCallback(() => {
     if (silenceCheckRef.current !== null) {
       cancelAnimationFrame(silenceCheckRef.current);
       silenceCheckRef.current = null;
+    }
+
+    if (sourceRef.current) {
+      sourceRef.current.disconnect();
+      sourceRef.current = null;
     }
 
     if (
@@ -85,6 +91,11 @@ export function useVoiceRecorder({
 
       // Use the provided analyser node for VAD
       if (analyserNode) {
+        // Connect the microphone stream to the analyser
+        const source = (analyserNode.context as AudioContext).createMediaStreamSource(stream);
+        source.connect(analyserNode);
+        sourceRef.current = source;
+
         const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
         let silentSince: number | null = null;
 

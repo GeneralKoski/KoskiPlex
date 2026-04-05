@@ -40,6 +40,52 @@ const EDGE_VOICES_LIST = [
     lang: "fr",
   },
   { id: "de-DE-KatjaNeural", label: "Katja (German)", icon: "🇩🇪", lang: "de" },
+  {
+    id: "pt-BR-FranciscaNeural",
+    label: "Francisca (Portuguese)",
+    icon: "🇧🇷",
+    lang: "pt",
+  },
+  {
+    id: "nl-NL-ColetteNeural",
+    label: "Colette (Dutch)",
+    icon: "🇳🇱",
+    lang: "nl",
+  },
+  {
+    id: "ru-RU-SvetlanaNeural",
+    label: "Svetlana (Russian)",
+    icon: "🇷🇺",
+    lang: "ru",
+  },
+  {
+    id: "ja-JP-NanamiNeural",
+    label: "Nanami (Japanese)",
+    icon: "🇯🇵",
+    lang: "ja",
+  },
+  {
+    id: "zh-CN-XiaoxiaoNeural",
+    label: "Xiaoxiao (Chinese)",
+    icon: "🇨🇳",
+    lang: "zh",
+  },
+  { id: "ko-KR-SunHiNeural", label: "Sun-Hi (Korean)", icon: "🇰🇷", lang: "ko" },
+  {
+    id: "ar-SA-ZariyahNeural",
+    label: "Zariyah (Arabic)",
+    icon: "🇸🇦",
+    lang: "ar",
+  },
+  { id: "hi-IN-SwaraNeural", label: "Swara (Hindi)", icon: "🇮🇳", lang: "hi" },
+  { id: "tr-TR-EmelNeural", label: "Emel (Turkish)", icon: "🇹🇷", lang: "tr" },
+  {
+    id: "pl-PL-AgnieszkaNeural",
+    label: "Agnieszka (Polish)",
+    icon: "🇵🇱",
+    lang: "pl",
+  },
+  { id: "sv-SE-SofieNeural", label: "Sofie (Swedish)", icon: "🇸🇪", lang: "sv" },
 ];
 
 const PREVIEW_PHRASES: Record<string, string> = {
@@ -48,6 +94,17 @@ const PREVIEW_PHRASES: Record<string, string> = {
   es: "¡Hola! Soy tu voz de IA de KoskiPlex. ¿Qué te parezco?",
   fr: "Bonjour! Je suis votre voix IA KoskiPlex. Qu'en pensez-vous?",
   de: "Hallo! Ich bin deine KoskiPlex KI-Stimme. Wie finde ich mich an?",
+  pt: "Olá! Eu sou a sua voz de IA do KoskiPlex. O que você acha?",
+  nl: "Hallo! Ik ben je KoskiPlex AI-stem. Hoe klink ik per jou?",
+  ru: "Привет! Я твой голос ИИ KoskiPlex. Как я тебе?",
+  ja: "こんにちは！私はあなたのKoskiPlex AI音声です。調子はどうですか？",
+  zh: "你好！我是你的 KoskiPlex AI 语音。你觉得我怎么样？",
+  ko: "안녕하세요! 저는 당신의 KoskiPlex AI 음성입니다. 어떻게 들리나요?",
+  ar: "مرحباً! أنا صوت الذكاء الاصطناعي لـ KoskiPlex. كيف أبدو لك؟",
+  hi: "नमस्ते! मैं आपकी कोस्कीप्लेक्स एआई आवाज़ हूँ। मैं आपको कैसा लग रहा हूँ?",
+  tr: "Merhaba! Ben sizin KoskiPlex AI sesinizim. Sesim nasıl geliyor?",
+  pl: "Cześć! Jestem Twoim głosem AI KoskiPlex. Jak brzmię?",
+  sv: "Hej! Jag är din KoskiPlex AI-röst. Hur låter jag?",
 };
 
 const SettingsView: React.FC<SettingsViewProps> = ({

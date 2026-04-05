@@ -52,7 +52,18 @@ def generate_practice_phrase(lang: str = "it", n_chars: int = 300) -> str:
         "en": "inglese",
         "es": "spagnola",
         "fr": "francese",
-        "de": "tedesca"
+        "de": "tedesca",
+        "pt": "portoghese",
+        "nl": "olandese",
+        "ru": "russa",
+        "ja": "giapponese",
+        "zh": "cinese",
+        "ko": "coreana",
+        "ar": "araba",
+        "hi": "hindi",
+        "tr": "turca",
+        "pl": "polacca",
+        "sv": "svedese"
     }
     target_lang = lang_map.get(lang, "italiana")
 

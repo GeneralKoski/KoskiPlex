@@ -6,15 +6,16 @@ import subprocess
 import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, StreamingResponse
 
 # Project Imports
 from config import (
     VOICES_DIR, PRELOAD_XTTS, WHISPER_HALLUCINATIONS,
     EDGE_VOICES, MAX_HISTORY
 )
-from services.voice_service import generate_audio, get_xtts
+from services.voice_service import generate_audio, generate_audio_stream, get_xtts
 from services.ai_service import (
     transcribe_audio, get_llm_reply, stream_llm_reply, generate_practice_phrase
 )
@@ -199,8 +200,8 @@ async def ws_voice(ws: WebSocket):
                         audio_data = await generate_audio(sentence_text, tts_engine, tts_voice, detected_lang)
                         if audio_data:
                             await ws.send_bytes(audio_data)
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        print(f"❌ [Audio-Chat] Error generating audio for chunk: {e}")
 
                     sentence_buffer = ""
 
@@ -233,8 +234,8 @@ async def ws_voice(ws: WebSocket):
                     audio_data = await generate_audio(sentence_text, tts_engine, tts_voice, detected_lang)
                     if audio_data:
                         await ws.send_bytes(audio_data)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"❌ [Audio-Chat-Final] Error generating audio: {e}")
 
             if not interrupted:
                 total_ms = round((time.perf_counter() - t_start) * 1000)
@@ -298,11 +299,11 @@ async def practice_phrase(lang: str = "it"):
 
 @app.get("/practice/reference")
 async def practice_reference(text: str, engine: str = "edge", voice: str = "", lang: str = "en"):
-    audio_data = await generate_audio(text, engine, voice, lang)
-    if audio_data:
-        from fastapi.responses import Response
-        return Response(content=audio_data, media_type="audio/mpeg")
-    return {"error": "Failed to generate audio"}
+    media_type = "audio/wav" if engine == "xtts" else "audio/mpeg"
+    return StreamingResponse(
+        generate_audio_stream(text, engine, voice, lang),
+        media_type=media_type
+    )
 
 
 @app.get("/voices/original/{name}")
