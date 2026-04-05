@@ -7,6 +7,7 @@ import Chat from "./components/Chat";
 import Controls from "./components/Controls";
 import Header from "./components/Header";
 import Orb from "./components/Orb";
+import PracticePanel from "./components/PracticePanel";
 import VoicePanel from "./components/VoicePanel";
 
 // Hooks
@@ -48,6 +49,7 @@ function App() {
     custom: [],
   });
   const [showVoicePanel, setShowVoicePanel] = useState(false);
+  const [showPracticePanel, setShowPracticePanel] = useState(false);
 
   const [selectedVoice, setSelectedVoice] = useState<SelectedVoice>(() => {
     const saved = localStorage.getItem("koskiplex_voice");
@@ -69,7 +71,7 @@ function App() {
     [],
   );
 
-  const { sendAudio, sendCommand } = useVoiceWebSocket({
+  const { isConnected, sendAudio, sendCommand } = useVoiceWebSocket({
     selectedVoice,
     onStatusChange: handleStatusChange,
     onTranscript: (msg: WSMessage) => {
@@ -241,15 +243,18 @@ function App() {
   }, [isPlaying.current, status, startRecording]);
 
   const statusLabel = {
+    connecting: "CONNECTING...",
     idle: isActive ? "READY" : "TAP TO BEGIN",
     listening: "LISTENING",
     processing: "THINKING",
     speaking: "SPEAKING",
     error: "ERROR",
-  }[status];
+  }[!isConnected ? "connecting" : status];
+
+  const canStart = isConnected && status === "idle" && !error;
 
   return (
-    <div className="app" data-state={stateKey}>
+    <div className="app" data-state={!isConnected ? "processing" : stateKey}>
       <div className="bg-blob bg-blob-1" />
       <div className="bg-blob bg-blob-2" />
       <div className="noise-overlay" />
@@ -264,7 +269,10 @@ function App() {
               status={status}
               accent={accent}
               analyserNode={analyser.current}
-              onClick={isActive ? stopSession : startSession}
+              onClick={() => {
+                if (!canStart && !isActive) return;
+                isActive ? stopSession() : startSession();
+              }}
             />
 
             <div className="mt-8 text-center min-h-[60px]">
@@ -304,11 +312,21 @@ function App() {
         )}
       </AnimatePresence>
 
+      <AnimatePresence>
+        {showPracticePanel && (
+          <PracticePanel
+            selectedVoice={selectedVoice}
+            onClose={() => setShowPracticePanel(false)}
+          />
+        )}
+      </AnimatePresence>
+
       <Controls
         onShowVoicePanel={() => {
           setShowVoicePanel((p) => !p);
           fetchVoices();
         }}
+        onShowPracticePanel={() => setShowPracticePanel((p) => !p)}
         onClearHistory={clearHistory}
       />
     </div>

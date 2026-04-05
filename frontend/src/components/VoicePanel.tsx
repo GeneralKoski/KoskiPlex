@@ -57,7 +57,12 @@ const VoicePanel: React.FC<VoicePanelProps> = ({
           </div>
         ) : (
           voices.custom.map((v) => (
-            <div key={v.name} className="voice-option">
+            <motion.div
+              key={v.name}
+              className="voice-option"
+              whileHover={{ x: 4 }}
+              transition={{ duration: 0.2 }}
+            >
               <div
                 className="voice-option-main"
                 onClick={() => onVoiceSelect({ engine: "xtts", voice: v.name })}
@@ -77,7 +82,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({
               >
                 <Trash2 size={16} />
               </button>
-            </div>
+            </motion.div>
           ))
         )}
       </div>
@@ -85,10 +90,12 @@ const VoicePanel: React.FC<VoicePanelProps> = ({
       <div className="voice-section">
         <span className="voice-section-label">Standard Voices</span>
         {EDGE_VOICES_LIST.map((v) => (
-          <div
+          <motion.div
             key={v.id}
             className="voice-option"
             onClick={() => onVoiceSelect({ engine: "edge", voice: v.id })}
+            whileHover={{ x: 4 }}
+            transition={{ duration: 0.2 }}
           >
             <div className="voice-option-main">
               <div
@@ -98,7 +105,7 @@ const VoicePanel: React.FC<VoicePanelProps> = ({
                 {v.icon} {v.label}
               </span>
             </div>
-          </div>
+          </motion.div>
         ))}
       </div>
 

@@ -30,10 +30,13 @@ export function useVoiceWebSocket({
 }: UseVoiceWebSocketProps): VoiceWebSocketHook {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectCountRef = useRef(0);
+  const wasManuallyClosedRef = useRef(false);
   const [isConnected, setIsConnected] = useState(false);
 
   const connect = useCallback(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+
+    wasManuallyClosedRef.current = false;
 
     const WS_URL =
       import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws/voice";
@@ -49,6 +52,18 @@ export function useVoiceWebSocket({
     };
 
     ws.onmessage = (e) => {
+      if (typeof e.data !== "string") {
+        // Binary data is always an audio chunk
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          if (reader.result instanceof ArrayBuffer) {
+            onAudioChunk?.(reader.result as any);
+          }
+        };
+        reader.readAsArrayBuffer(e.data);
+        return;
+      }
+
       try {
         const msg: WSMessage = JSON.parse(e.data);
         switch (msg.type) {
@@ -57,9 +72,6 @@ export function useVoiceWebSocket({
             break;
           case "reply_chunk":
             onReplyChunk?.(msg);
-            break;
-          case "audio_chunk":
-            if (msg.data) onAudioChunk?.(msg.data);
             break;
           case "reply_done":
             onReplyDone?.(msg);
@@ -77,7 +89,7 @@ export function useVoiceWebSocket({
       setIsConnected(false);
       wsRef.current = null;
 
-      if (reconnectCountRef.current < MAX_RECONNECT_SAMPLES) {
+      if (!wasManuallyClosedRef.current && reconnectCountRef.current < MAX_RECONNECT_SAMPLES) {
         const delay =
           RECONNECT_DELAY * Math.pow(1.5, reconnectCountRef.current);
         console.log(`Reconnecting in ${Math.round(delay)}ms...`);
@@ -103,20 +115,8 @@ export function useVoiceWebSocket({
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const hex = Array.from(new Uint8Array(reader.result as ArrayBuffer))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-      ws.send(
-        JSON.stringify({
-          type: "audio",
-          data: hex,
-          ext: blob.type.includes("mp4") ? "mp4" : "webm",
-        }),
-      );
-    };
-    reader.readAsArrayBuffer(blob);
+    // Send the blob directly as binary
+    ws.send(blob);
   }, []);
 
   const sendCommand = useCallback((cmd: Partial<WSMessage>) => {
@@ -130,6 +130,7 @@ export function useVoiceWebSocket({
     connect();
     return () => {
       if (wsRef.current) {
+        wasManuallyClosedRef.current = true;
         wsRef.current.close();
       }
     };

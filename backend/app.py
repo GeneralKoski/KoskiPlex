@@ -1,21 +1,29 @@
 import asyncio
 import base64
-import io
 import json
-import time
 import os
-from pathlib import Path
-
-import edge_tts
-from dotenv import load_dotenv
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from groq import Groq
-from pydantic import BaseModel
 
-load_dotenv()
+# Project Imports
+from config import (
+    VOICES_DIR, PRELOAD_XTTS, WHISPER_HALLUCINATIONS,
+    EDGE_VOICES, MAX_HISTORY
+)
+from services.voice_service import generate_audio, get_xtts
+from services.ai_service import (
+    transcribe_audio, get_llm_reply, stream_llm_reply
+)
 
-app = FastAPI(title="KoskiPlex")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if PRELOAD_XTTS:
+        print("💡 [Startup] Triggering XTTS pre-load task...")
+        asyncio.create_task(asyncio.to_thread(get_xtts))
+    yield
+
+app = FastAPI(title="KoskiPlex", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,171 +33,25 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = Groq()
-
-VOICES_DIR = Path(__file__).parent / "voices"
-VOICES_DIR.mkdir(exist_ok=True)
-
-STT_MODEL = os.getenv("STT_MODEL", "whisper-large-v3")
-LLM_MODEL = os.getenv("LLM_MODEL", "llama-3.3-70b-versatile")
-SYSTEM_PROMPT = (
-    "You are KoskiPlex, a fast voice assistant. "
-    "Always respond in 1-2 short sentences. Be direct and concise. "
-    "Never use lists, markdown, or formatting — you are being read aloud. "
-    "Respond in the same language the user speaks to you."
-)
-MAX_HISTORY = 20
-WHISPER_HALLUCINATIONS = {
-    "thank you", "thanks", "thank you.", "thanks.", "thank you for watching",
-    "thanks for watching", "thank you for watching.", "thanks for watching.",
-    "like and subscribe", "subscribe", "bye", "bye.", "you",
-    "the end", "the end.", "...", "", " ",
-}
-
-EDGE_VOICES = {
-    "italian": "it-IT-IsabellaNeural",
-    "english": "en-US-JennyNeural",
-    "spanish": "es-ES-ElviraNeural",
-    "french": "fr-FR-DeniseNeural",
-    "german": "de-DE-KatjaNeural",
-    "portuguese": "pt-BR-FranciscaNeural",
-    "dutch": "nl-NL-ColetteNeural",
-    "russian": "ru-RU-SvetlanaNeural",
-    "japanese": "ja-JP-NanamiNeural",
-    "chinese": "zh-CN-XiaoxiaoNeural",
-    "korean": "ko-KR-SunHiNeural",
-    "arabic": "ar-SA-ZariyahNeural",
-    "hindi": "hi-IN-SwaraNeural",
-    "turkish": "tr-TR-EmelNeural",
-    "polish": "pl-PL-AgnieszkaNeural",
-    "swedish": "sv-SE-SofieNeural",
-}
-DEFAULT_EDGE_VOICE = "en-US-JennyNeural"
-
-xtts_model = None
-
-
-def get_xtts():
-    global xtts_model
-    if xtts_model is None:
-        start_t = time.time()
-        print("🚀 [XTTS] Loading model tts_models/multilingual/multi-dataset/xtts_v2...")
-        try:
-            from TTS.api import TTS as CoquiTTS
-            xtts_model = CoquiTTS("tts_models/multilingual/multi-dataset/xtts_v2")
-            elapsed = time.time() - start_t
-            print(f"✅ [XTTS] Model loaded successfully in {elapsed:.2f}s.")
-        except Exception as e:
-            print(f"❌ [XTTS] Error loading model: {e}")
-    return xtts_model
-
-
-@app.on_event("startup")
-async def startup_event():
-    # Pre-load XTTS in background
-    if os.getenv("PRELOAD_XTTS", "true").lower() == "true":
-        print("💡 [Startup] Triggering XTTS pre-load task...")
-        asyncio.create_task(asyncio.to_thread(get_xtts))
-
-
-class ChatRequest(BaseModel):
-    text: str
-    history: list[dict] = []
-
-
-# ── TTS engines ──────────────────────────────────
-
-async def tts_edge(text: str, voice: str = DEFAULT_EDGE_VOICE) -> bytes:
-    communicate = edge_tts.Communicate(text, voice)
-    audio = b""
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio += chunk["data"]
-    return audio
-
-
-def tts_xtts_sync(text: str, speaker_wav: str, language: str = "en") -> bytes:
-    model = get_xtts()
-    wav_path = "/tmp/koskiplex_tts_out.wav"
-    model.tts_to_file(
-        text=text,
-        speaker_wav=speaker_wav,
-        language=language,
-        file_path=wav_path,
-    )
-    with open(wav_path, "rb") as f:
-        return f.read()
-
-
-async def generate_audio(text: str, engine: str, voice: str, language: str) -> bytes:
-    if engine == "xtts":
-        voice_path = VOICES_DIR / f"{voice}.wav"
-        if not voice_path.exists():
-            return b""
-        lang_code = language[:2] if language else "en"
-        return await asyncio.to_thread(tts_xtts_sync, text, str(voice_path), lang_code)
-    else:
-        edge_voice = voice or EDGE_VOICES.get(language, DEFAULT_EDGE_VOICE)
-        return await tts_edge(text, edge_voice)
-
-
-# ── STT + LLM ───────────────────────────────────
-
-async def transcribe_audio(audio_bytes: bytes, filename: str) -> dict:
-    t0 = time.perf_counter()
-    transcription = client.audio.transcriptions.create(
-        model=STT_MODEL,
-        file=(filename, audio_bytes),
-        response_format="verbose_json",
-    )
-    stt_ms = round((time.perf_counter() - t0) * 1000)
-    return {
-        "text": transcription.text,
-        "language": transcription.language,
-        "stt_ms": stt_ms,
-    }
-
-
-def get_llm_reply(user_text: str, history: list[dict]) -> dict:
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages.extend(history[-MAX_HISTORY:])
-    messages.append({"role": "user", "content": user_text})
-
-    t0 = time.perf_counter()
-    completion = client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=messages,
-    )
-    llm_ms = round((time.perf_counter() - t0) * 1000)
-    return {"text": completion.choices[0].message.content, "llm_ms": llm_ms}
-
-
-def stream_llm_reply(user_text: str, history: list[dict]):
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    messages.extend(history[-MAX_HISTORY:])
-    messages.append({"role": "user", "content": user_text})
-
-    return client.chat.completions.create(
-        model=LLM_MODEL,
-        messages=messages,
-        stream=True,
-    )
-
-
 # ── Voice management endpoints ───────────────────
 
 @app.get("/voices")
 async def list_voices():
     custom = []
-    for f in VOICES_DIR.glob("*.wav"):
-        custom.append({"name": f.stem, "engine": "xtts"})
+    # Support multiple extensions
+    extensions = ("*.wav", "*.mp3", "*.webm", "*.m4a")
+    found_stems = set()
+    for ext in extensions:
+        for f in VOICES_DIR.glob(ext):
+            if f.stem not in found_stems:
+                custom.append({"name": f.stem, "engine": "xtts"})
+                found_stems.add(f.stem)
 
     default = []
     for lang, voice_id in EDGE_VOICES.items():
         default.append({"name": voice_id, "language": lang, "engine": "edge"})
 
     return {"default": default, "custom": custom}
-
 
 @app.post("/voices/upload")
 async def upload_voice(name: str = Form(...), file: UploadFile = File(...)):
@@ -198,20 +60,22 @@ async def upload_voice(name: str = Form(...), file: UploadFile = File(...)):
         return {"error": "Invalid name"}
 
     audio_bytes = await file.read()
-    voice_path = VOICES_DIR / f"{safe_name}.wav"
+    # Keep original extension or default to .wav
+    ext = Path(file.filename).suffix if file.filename else ".wav"
+    if not ext: ext = ".wav"
+
+    voice_path = VOICES_DIR / f"{safe_name}{ext}"
     voice_path.write_bytes(audio_bytes)
 
     return {"name": safe_name, "engine": "xtts"}
 
-
 @app.delete("/voices/{name}")
 async def delete_voice(name: str):
-    voice_path = VOICES_DIR / f"{name}.wav"
-    if voice_path.exists():
-        voice_path.unlink()
+    # Find any file with that name stem
+    for f in VOICES_DIR.glob(f"{name}.*"):
+        f.unlink()
         return {"deleted": name}
     return {"error": "Not found"}
-
 
 # ── WebSocket voice endpoint ──────────────────────
 
@@ -225,100 +89,125 @@ async def ws_voice(ws: WebSocket):
 
     try:
         while True:
-            msg = await ws.receive_json()
+            try:
+                data = await ws.receive()
+            except (WebSocketDisconnect, RuntimeError):
+                print("Client disconnected.")
+                break
 
-            if msg["type"] == "set_voice":
-                tts_engine = msg.get("engine", "edge")
-                tts_voice = msg.get("voice", "")
+            if "text" in data:
+                msg = json.loads(data["text"])
+                if msg["type"] == "set_voice":
+                    tts_engine = msg.get("engine", "edge")
+                    tts_voice = msg.get("voice", "")
+                elif msg["type"] == "interrupt":
+                    interrupted = True
+                elif msg["type"] == "clear":
+                    history = []
                 continue
 
-            if msg["type"] == "audio":
-                interrupted = False
-                audio_bytes = bytes.fromhex(msg["data"])
-                ext = msg.get("ext", "webm")
-                t_start = time.perf_counter()
+            if "bytes" not in data:
+                continue
 
-                stt_result = await transcribe_audio(audio_bytes, f"recording.{ext}")
+            # Binary audio message
+            interrupted = False
+            audio_bytes = data["bytes"]
 
-                if stt_result["text"].strip().lower() in WHISPER_HALLUCINATIONS:
-                    await ws.send_json({"type": "reply_done", "full_reply": "", "language": stt_result["language"], "timing": {"stt_ms": stt_result["stt_ms"], "llm_first_token_ms": 0, "llm_total_ms": 0, "total_ms": stt_result["stt_ms"]}, "interrupted": False})
+            stt_result = await transcribe_audio(audio_bytes, "recording.webm")
+
+            if stt_result["text"].strip().lower() in WHISPER_HALLUCINATIONS:
+                await ws.send_json({
+                    "type": "reply_done",
+                    "full_reply": "",
+                    "language": stt_result["language"],
+                    "timing": {
+                        "stt_ms": stt_result["stt_ms"],
+                        "llm_first_token_ms": 0,
+                        "llm_total_ms": 0,
+                        "total_ms": stt_result["stt_ms"]
+                    },
+                    "interrupted": False
+                })
+                continue
+
+            detected_lang = stt_result["language"]
+
+            await ws.send_json({
+                "type": "transcript",
+                "text": stt_result["text"],
+                "language": detected_lang,
+                "stt_ms": stt_result["stt_ms"],
+            })
+
+            stream = stream_llm_reply(stt_result["text"], history)
+            full_reply = ""
+            sentence_buffer = ""
+            first_token_ms = None
+            import time
+            t_start = time.perf_counter()
+            t_llm_start = time.perf_counter()
+
+            for chunk in stream:
+                if interrupted:
+                    stream.close()
+                    break
+
+                token = chunk.choices[0].delta.content or ""
+                if not token:
                     continue
 
-                detected_lang = stt_result["language"]
+                if first_token_ms is None:
+                    first_token_ms = round((time.perf_counter() - t_llm_start) * 1000)
 
-                await ws.send_json({
-                    "type": "transcript",
-                    "text": stt_result["text"],
-                    "language": detected_lang,
-                    "stt_ms": stt_result["stt_ms"],
-                })
+                full_reply += token
+                sentence_buffer += token
 
-                stream = stream_llm_reply(stt_result["text"], history)
-                full_reply = ""
-                sentence_buffer = ""
-                first_token_ms = None
-                t_llm_start = time.perf_counter()
-
-                for chunk in stream:
-                    if interrupted:
-                        stream.close()
-                        break
-
-                    token = chunk.choices[0].delta.content or ""
-                    if not token:
-                        continue
-
-                    if first_token_ms is None:
-                        first_token_ms = round((time.perf_counter() - t_llm_start) * 1000)
-
-                    full_reply += token
-                    sentence_buffer += token
-
-                    if any(sentence_buffer.rstrip().endswith(p) for p in ['.', '!', '?', '。', '！', '？']):
-                        sentence_text = sentence_buffer.strip()
-                        await ws.send_json({
-                            "type": "reply_chunk",
-                            "text": sentence_text,
-                        })
-
-                        try:
-                            audio_data = await generate_audio(sentence_text, tts_engine, tts_voice, detected_lang)
-                            if audio_data:
-                                await ws.send_json({
-                                    "type": "audio_chunk",
-                                    "data": base64.b64encode(audio_data).decode(),
-                                })
-                        except Exception:
-                            pass
-
-                        sentence_buffer = ""
+                if any(sentence_buffer.rstrip().endswith(p) for p in ['.', '!', '?', '。', '！', '？']):
+                    sentence_text = sentence_buffer.strip()
+                    await ws.send_json({"type": "reply_chunk", "text": sentence_text})
 
                     try:
-                        raw = await asyncio.wait_for(ws.receive_text(), timeout=0.001)
-                        peek = json.loads(raw)
+                        audio_data = await generate_audio(sentence_text, tts_engine, tts_voice, detected_lang)
+                        if audio_data:
+                            await ws.send_bytes(audio_data)
+                    except Exception:
+                        pass
+
+                    sentence_buffer = ""
+
+                # Check for interruption during streaming
+                try:
+                    raw = await asyncio.wait_for(ws.receive(), timeout=0.001)
+                    if "text" in raw:
+                        peek = json.loads(raw["text"])
                         if peek.get("type") == "interrupt":
                             interrupted = True
                             stream.close()
                             break
-                    except (asyncio.TimeoutError, Exception):
-                        pass
+                    elif "bytes" in raw:
+                        # If user sends audio while we're talking, we could interrupt
+                        # but for now we just skip or handle it as an interruption
+                        interrupted = True
+                        stream.close()
+                        break
+                except asyncio.TimeoutError:
+                    pass
+                except (WebSocketDisconnect, RuntimeError):
+                    interrupted = True
+                    stream.close()
+                    break
 
-                if sentence_buffer.strip() and not interrupted:
-                    sentence_text = sentence_buffer.strip()
-                    await ws.send_json({
-                        "type": "reply_chunk",
-                        "text": sentence_text,
-                    })
-                    try:
-                        audio_data = await generate_audio(sentence_text, tts_engine, tts_voice, detected_lang)
-                        if audio_data:
-                            await ws.send_json({
-                                "type": "audio_chunk",
-                                "data": base64.b64encode(audio_data).decode(),
-                            })
-                    except Exception:
-                        pass
+            if sentence_buffer.strip() and not interrupted:
+                sentence_text = sentence_buffer.strip()
+                await ws.send_json({"type": "reply_chunk", "text": sentence_text})
+                try:
+                    audio_data = await generate_audio(sentence_text, tts_engine, tts_voice, detected_lang)
+                    if audio_data:
+                        await ws.send_bytes(audio_data)
+                except Exception:
+                    pass
 
+            if not interrupted:
                 total_ms = round((time.perf_counter() - t_start) * 1000)
                 llm_ms = round((time.perf_counter() - t_llm_start) * 1000)
 
@@ -332,24 +221,29 @@ async def ws_voice(ws: WebSocket):
                         "llm_total_ms": llm_ms,
                         "total_ms": total_ms,
                     },
-                    "interrupted": interrupted,
+                    "interrupted": False,
                 })
 
-                if not interrupted:
-                    history.append({"role": "user", "content": stt_result["text"]})
-                    history.append({"role": "assistant", "content": full_reply.strip()})
-                    if len(history) > MAX_HISTORY:
-                        history = history[-MAX_HISTORY:]
+                history.append({"role": "user", "content": stt_result["text"]})
+                history.append({"role": "assistant", "content": full_reply.strip()})
+                if len(history) > MAX_HISTORY:
+                    history = history[-MAX_HISTORY:]
 
-            elif msg["type"] == "interrupt":
-                interrupted = True
+    except Exception as e:
+        print(f"WS Error: {e}")
+    finally:
+        try:
+            await ws.close()
+        except:
+            pass
 
-            elif msg["type"] == "clear":
-                history = []
-
-    except WebSocketDisconnect:
-        pass
-
+@app.get("/practice/reference")
+async def practice_reference(text: str, engine: str = "edge", voice: str = "", lang: str = "en"):
+    audio_data = await generate_audio(text, engine, voice, lang)
+    if audio_data:
+        from fastapi.responses import Response
+        return Response(content=audio_data, media_type="audio/mpeg")
+    return {"error": "Failed to generate audio"}
 
 # ── HTTP endpoints (kept for compatibility) ───────
 
@@ -357,43 +251,18 @@ async def ws_voice(ws: WebSocket):
 async def health():
     return {"status": "ok"}
 
-
 @app.post("/transcribe")
 async def transcribe(file: UploadFile = File(...)):
     audio_bytes = await file.read()
     result = await transcribe_audio(audio_bytes, file.filename)
     return result
 
-
 @app.post("/chat")
-async def chat(req: ChatRequest):
-    result = get_llm_reply(req.text, req.history)
-    return {"reply": result["text"], "llm_ms": result["llm_ms"]}
-
-
-@app.post("/voice")
-async def voice(
-    file: UploadFile = File(...),
-    history: str = Form("[]"),
-):
-    audio_bytes = await file.read()
+async def chat(text: str, history: str = "[]"):
     parsed_history = json.loads(history)
-
-    stt_result = await transcribe_audio(audio_bytes, file.filename)
-    llm_result = get_llm_reply(stt_result["text"], parsed_history)
-
-    return {
-        "transcript": stt_result["text"],
-        "reply": llm_result["text"],
-        "language": stt_result["language"],
-        "timing": {
-            "stt_ms": stt_result["stt_ms"],
-            "llm_ms": llm_result["llm_ms"],
-        },
-    }
-
+    result = get_llm_reply(text, parsed_history)
+    return {"reply": result["text"], "llm_ms": result["llm_ms"]}
 
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)

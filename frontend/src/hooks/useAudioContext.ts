@@ -44,17 +44,23 @@ export function useAudioContext(): AudioContextHook {
 
     isPlayingRef.current = true;
     const { ctx, analyser } = initAudioContext();
-    const base64 = queueRef.current.shift();
-    if (!base64) return;
+    const data = queueRef.current.shift();
+    if (!data) return;
 
     try {
-      const binaryString = window.atob(base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      let arrayBuffer: ArrayBuffer;
+      if (typeof data === "string") {
+        const binaryString = window.atob(data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        arrayBuffer = bytes.buffer;
+      } else {
+        arrayBuffer = data;
       }
 
-      const audioBuffer = await ctx.decodeAudioData(bytes.buffer);
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(analyser);
@@ -69,8 +75,8 @@ export function useAudioContext(): AudioContextHook {
   }, [initAudioContext]);
 
   const queueAudio = useCallback(
-    (base64: string) => {
-      queueRef.current.push(base64);
+    (data: ArrayBuffer | string) => {
+      queueRef.current.push(data as any); // Cast because of internal ref type
       if (!isPlayingRef.current) {
         playNext();
       }

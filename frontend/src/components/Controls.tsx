@@ -1,14 +1,16 @@
 import { motion } from "framer-motion";
-import { Settings, Trash2 } from "lucide-react";
+import { BookOpen, Settings, Trash2 } from "lucide-react";
 import React from "react";
 
 interface ControlsProps {
   onShowVoicePanel: () => void;
+  onShowPracticePanel: () => void;
   onClearHistory: () => void;
 }
 
 const Controls: React.FC<ControlsProps> = ({
   onShowVoicePanel,
+  onShowPracticePanel,
   onClearHistory,
 }) => {
   return (
@@ -18,6 +20,16 @@ const Controls: React.FC<ControlsProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
     >
+      <motion.button
+        className="ctrl-btn"
+        onClick={onShowPracticePanel}
+        title="Practice pronunciation"
+        type="button"
+        whileHover={{ scale: 1.05, y: -2 }}
+        whileTap={{ scale: 0.95 }}
+      >
+        <BookOpen size={20} strokeWidth={1.8} />
+      </motion.button>
       <motion.button
         className="ctrl-btn"
         onClick={onShowVoicePanel}
