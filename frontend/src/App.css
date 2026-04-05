@@ -475,6 +475,7 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 20px;
+  padding: 0 20px !important;
 }
 
 .voice-panel-title {
@@ -658,6 +659,8 @@
   max-height: 80vh;
 }
 
+
+
 .practice-label {
   font-family: var(--font-mono);
   font-size: 0.65rem;
@@ -668,18 +671,61 @@
   margin-bottom: 12px;
 }
 
+.practice-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.practice-label-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.phrase-refresh-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.phrase-refresh-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  transform: rotate(30deg);
+}
+
+.phrase-refresh-btn.spinning svg {
+  animation: practice-spin 1s linear infinite;
+}
+
 .practice-phrase {
-  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.05);
-  border: 1px solid rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.1);
-  border-radius: 16px;
-  padding: 24px;
+  background: rgba(0, 0, 0, 0.2);
+  border-left: 4px solid var(--accent);
+  padding: 1.5rem;
+  border-radius: 4px 16px 16px 4px;
   font-size: 1.1rem;
-  line-height: 1.5;
-  color: var(--text-primary);
-  margin-bottom: 30px;
-  text-align: center;
-  font-weight: 400;
-  box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.2);
+  line-height: 1.6;
+  color: white;
+  font-family: var(--font-mono);
+  min-height: 100px;
+  display: flex;
+  align-items: center;
+  transition: all 0.3s ease;
+}
+
+.practice-phrase.loading {
+  opacity: 0.4;
+  filter: blur(4px);
 }
 
 .practice-actions {
@@ -761,4 +807,656 @@
 
 @keyframes practice-spin {
   to { transform: rotate(360deg); }
+}
+
+/* Save Voice Section in Practice Panel */
+.practice-save-section {
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  margin-top: 2rem;
+  padding-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.save-voice-controls {
+  display: flex;
+  gap: 12px;
+}
+
+.voice-name-input {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 12px 16px;
+  color: white;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  transition: all 0.3s ease;
+  outline: none;
+}
+
+.voice-name-input:focus {
+  border-color: var(--accent);
+  background: rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0 15px -5px var(--accent-glow);
+}
+
+.save-voice-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 20px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-elevated);
+  color: white;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 140px;
+}
+
+.save-voice-btn:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  transform: translateY(-2px);
+}
+
+.save-voice-btn.success {
+  background: #10b981;
+  border-color: #10b981;
+  cursor: default;
+}
+
+.save-voice-btn.error {
+  background: #ef4444;
+  border-color: #ef4444;
+}
+
+.save-voice-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.save-error-msg {
+  font-size: 0.7rem;
+  color: #ef4444;
+  font-family: var(--font-mono);
+  margin-top: 4px;
+}
+
+.spinning {
+  animation: practice-spin 1.5s linear infinite;
+}
+
+/* ── Section Navigation ────────────────────────── */
+
+.navbar {
+  position: fixed;
+  bottom: 2rem;
+  left: 0;
+  right: 0;
+  height: auto;
+  background: transparent;
+  border: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  pointer-events: none;
+}
+
+.navbar-container {
+  pointer-events: auto;
+  display: flex;
+  gap: 12px;
+  background: rgba(20, 20, 30, 0.6);
+  backdrop-filter: blur(24px) saturate(180%);
+  padding: 8px 12px;
+  border-radius: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow:
+    0 12px 40px -10px rgba(0, 0, 0, 0.5),
+    0 8px 16px -4px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.nav-item {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: auto;
+  border-radius: 20px;
+}
+
+.nav-item.active {
+  color: var(--accent);
+}
+
+.nav-item-glow {
+  position: absolute;
+  inset: 0;
+  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.1);
+  border-radius: 14px;
+  z-index: -1;
+  box-shadow: 0 0 20px -5px var(--accent-glow);
+}
+
+.nav-label {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+/* ── Content Layout ────────────────────────────── */
+
+.main-container {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.view-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start !important;
+  width: 100%;
+  gap: 2rem;
+}
+
+/* ── Settings View ─────────────────────────────── */
+
+.settings-view {
+  padding: 20px 0;
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.settings-header {
+  margin-bottom: 2rem;
+}
+
+.settings-title {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.settings-subtitle {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  gap: 2rem;
+}
+
+.settings-section {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 24px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.section-title {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.voice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.voice-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.voice-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  transform: translateX(4px);
+}
+
+.voice-card.selected {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+}
+
+.voice-card-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 1;
+}
+
+.voice-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.voice-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.voice-type {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.selected-indicator {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--accent);
+  box-shadow: 2px 0 10px var(--accent-glow);
+}
+
+.btn-upload-full {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px;
+  background: white;
+  color: black;
+  border: none;
+  border-radius: 14px;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-upload-full:hover {
+  background: #f0f0f0;
+  transform: translateY(-2px);
+}
+
+.btn-icon-delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.1);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-icon-delete:hover {
+  background: #ef4444;
+  color: white;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 2rem;
+  font-family: var(--font-mono);
+}
+
+/* ── Practice Full-Page Tweak ─────────────────── */
+
+.practice-panel {
+  position: relative !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 100% !important;
+  max-width: 800px !important;
+  margin: 0 auto !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.practice-content {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 24px;
+  padding: 2rem;
+}
+
+/* ── Header Improvements ───────────────────────── */
+
+.header {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 24px 32px !important;
+  width: 100%;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.header-badges {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.header-clear-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 8px 14px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.header-clear-btn:hover {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  transform: translateY(-1px);
+}
+
+.header-clear-btn svg {
+  opacity: 0.6;
+}
+
+.header-clear-btn:hover svg {
+  opacity: 1;
+}
+
+@media (max-width: 768px) {
+  .header {
+    padding: 16px 20px !important;
+  }
+  .header-left {
+    gap: 12px;
+  }
+  .header-badges {
+    display: none; /* Hide badges on small mobile header to save space */
+  }
+  .header-clear-btn span {
+    display: none;
+  }
+}
+
+/* ── Voice Preview Button ──────────────────────── */
+
+.btn-preview {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.btn-preview:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.1);
+  box-shadow: 0 0 15px var(--accent-glow);
+}
+
+.btn-preview.playing {
+  background: #10b981;
+  border-color: #10b981;
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+}
+
+.spinning { /* Reuse existing spin animation */
+  animation: practice-spin 0.8s linear infinite;
+}
+
+/* ── Chat Centering Visuals ────────────────────── */
+
+.status-container {
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-viewport {
+  width: 100%;
+  max-width: 600px;
+  height: 35vh; /* Restore controlled height for centering visibility */
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Navbar Floating Bubble Tweaks ─────────────── */
+
+.navbar-container {
+  padding: 6px;
+  gap: 6px;
+}
+
+.nav-item {
+  padding: 10px 16px;
+  border-radius: 22px;
+}
+
+.nav-item-glow {
+  border-radius: 20px;
+}
+
+.nav-label {
+  font-size: 0.6rem;
+}
+
+
+
+/* ── Absolute Centering Fix ───────────────────── */
+
+.chat-view-layout {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center; /* This centers everything together */
+}
+
+/* We want the Orb to stay at a fixed vertical position regardless of other elements */
+.orb-stage {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+/* Status and Chat follow the Orb but don't move it */
+.chat-overlay {
+  position: absolute;
+  top: calc(50% + 140px); /* 140px below the center of the Orb */
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.status-container-fixed {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-viewport-fixed {
+  width: 100%;
+  height: 25vh;
+  display: flex;
+  flex-direction: column;
+}
+
+
+/* ── Viewport Relative Positioning ───────────── */
+
+.orb-stage {
+  position: fixed !important; /* Force it to ignore parent flex flow */
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+.chat-overlay {
+  position: fixed !important;
+  top: calc(50% + 160px) !important; /* Move it down from the fixed center */
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  max-width: 500px !important;
+}
+
+@media (max-height: 700px) {
+  .chat-overlay {
+    top: auto !important;
+    bottom: 100px !important;
+    max-height: 30vh !important;
+  }
+  .chat-viewport-fixed {
+    height: 20vh !important;
+  }
+}
+
+/* ── UI Polish & Utilities ─────────────────────── */
+
+.uploader-area {
+  margin-top: 2rem;
+}
+
+.uploader-capsule {
+  width: 100%;
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1.5px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.uploader-capsule:hover {
+  background: rgba(var(--accent-r), var(--accent-g), var(--accent-b), 0.04);
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.uploader-icon-wrapper {
+  background: var(--bg-elevated);
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.2);
+}
+
+.uploader-text-main {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.uploader-text-sub {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+}
+
+.hidden {
+  display: none !important;
+}
+
+.uploader-text-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
 }

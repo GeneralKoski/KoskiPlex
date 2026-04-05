@@ -1,9 +1,6 @@
 import { RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { AppStatus, SelectedVoice, WSMessage } from "../types";
 
-const RECONNECT_DELAY = 1000;
-const MAX_RECONNECT_SAMPLES = 5;
-
 interface UseVoiceWebSocketProps {
   onTranscript: (msg: WSMessage) => void;
   onReplyChunk: (msg: WSMessage) => void;
@@ -29,35 +26,79 @@ export function useVoiceWebSocket({
   selectedVoice,
 }: UseVoiceWebSocketProps): VoiceWebSocketHook {
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectCountRef = useRef(0);
-  const wasManuallyClosedRef = useRef(false);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const [isConnected, setIsConnected] = useState(false);
 
-  const connect = useCallback(() => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
+  const callbacks = useRef({
+    onTranscript,
+    onReplyChunk,
+    onAudioChunk,
+    onReplyDone,
+    onStatusChange,
+  });
 
-    wasManuallyClosedRef.current = false;
+  useEffect(() => {
+    callbacks.current = {
+      onTranscript,
+      onReplyChunk,
+      onAudioChunk,
+      onReplyDone,
+      onStatusChange,
+    };
+  }, [onTranscript, onReplyChunk, onAudioChunk, onReplyDone, onStatusChange]);
+
+  const selectedVoiceRef = useRef(selectedVoice);
+  useEffect(() => {
+    selectedVoiceRef.current = selectedVoice;
+  }, [selectedVoice]);
+
+  const connect = useCallback(() => {
+    // Detach and close any previous WS so stale handlers can't interfere
+    if (wsRef.current) {
+      wsRef.current.onopen = null;
+      wsRef.current.onmessage = null;
+      wsRef.current.onclose = null;
+      wsRef.current.onerror = null;
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
 
     const WS_URL =
-      import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws/voice";
+      import.meta.env.VITE_WS_URL || "ws://127.0.0.1:8000/ws/voice";
+
+    console.log("WS: Connecting to", WS_URL);
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log("Voice WebSocket connected");
+      if (wsRef.current !== ws) return;
+      console.log("WS: Connected successfully");
       setIsConnected(true);
-      reconnectCountRef.current = 0;
-      onStatusChange?.("idle");
-      ws.send(JSON.stringify({ type: "set_voice", ...selectedVoice }));
+      callbacks.current.onStatusChange?.("idle");
+      ws.send(
+        JSON.stringify({
+          type: "set_voice",
+          engine: selectedVoiceRef.current.engine,
+          voice: selectedVoiceRef.current.voice,
+        }),
+      );
     };
 
     ws.onmessage = (e) => {
+      if (wsRef.current !== ws) return;
+
       if (typeof e.data !== "string") {
-        // Binary data is always an audio chunk
         const reader = new FileReader();
         reader.onloadend = () => {
           if (reader.result instanceof ArrayBuffer) {
-            onAudioChunk?.(reader.result as any);
+            callbacks.current.onAudioChunk?.(reader.result as any);
           }
         };
         reader.readAsArrayBuffer(e.data);
@@ -68,13 +109,13 @@ export function useVoiceWebSocket({
         const msg: WSMessage = JSON.parse(e.data);
         switch (msg.type) {
           case "transcript":
-            onTranscript?.(msg);
+            callbacks.current.onTranscript?.(msg);
             break;
           case "reply_chunk":
-            onReplyChunk?.(msg);
+            callbacks.current.onReplyChunk?.(msg);
             break;
           case "reply_done":
-            onReplyDone?.(msg);
+            callbacks.current.onReplyDone?.(msg);
             break;
           default:
             break;
@@ -84,63 +125,65 @@ export function useVoiceWebSocket({
       }
     };
 
-    ws.onclose = () => {
-      console.log("Voice WebSocket closed");
+    ws.onclose = (event) => {
+      if (wsRef.current !== ws) return;
+      console.log(
+        `WS: Connection closed (code: ${event.code}, reason: ${event.reason}), reconnecting in 2s...`,
+      );
       setIsConnected(false);
       wsRef.current = null;
-
-      if (!wasManuallyClosedRef.current && reconnectCountRef.current < MAX_RECONNECT_SAMPLES) {
-        const delay =
-          RECONNECT_DELAY * Math.pow(1.5, reconnectCountRef.current);
-        console.log(`Reconnecting in ${Math.round(delay)}ms...`);
-        setTimeout(connect, delay);
-        reconnectCountRef.current++;
-      }
+      reconnectTimeoutRef.current = setTimeout(connect, 2000);
     };
 
     ws.onerror = (e) => {
+      if (wsRef.current !== ws) return;
       console.error("WS error:", e);
-      onStatusChange?.("error", "Connection failed");
+      callbacks.current.onStatusChange?.("error", "Connection failed");
     };
-  }, [
-    selectedVoice,
-    onTranscript,
-    onReplyChunk,
-    onAudioChunk,
-    onReplyDone,
-    onStatusChange,
-  ]);
-
-  const sendAudio = useCallback((blob: Blob) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-    // Send the blob directly as binary
-    ws.send(blob);
   }, []);
 
-  const sendCommand = useCallback((cmd: Partial<WSMessage>) => {
-    const ws = wsRef.current;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(cmd));
+  const sendAudio = useCallback((blob: Blob) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(blob);
     }
   }, []);
 
+  const sendCommand = useCallback((cmd: Partial<WSMessage>) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify(cmd));
+    }
+  }, []);
+
+  // Main lifecycle
   useEffect(() => {
     connect();
     return () => {
-      if (wsRef.current) {
-        wasManuallyClosedRef.current = true;
-        wsRef.current.close();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
       }
+      if (wsRef.current) {
+        wsRef.current.onopen = null;
+        wsRef.current.onmessage = null;
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      setIsConnected(false);
     };
   }, [connect]);
 
-  // Update voice if selectedVoice changes
+  // Dynamic voice update WITHOUT reconnecting
   useEffect(() => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      console.log("WS: Syncing voice settings...");
       wsRef.current.send(
-        JSON.stringify({ type: "set_voice", ...selectedVoice }),
+        JSON.stringify({
+          type: "set_voice",
+          engine: selectedVoice.engine,
+          voice: selectedVoice.voice,
+        }),
       );
     }
   }, [selectedVoice]);

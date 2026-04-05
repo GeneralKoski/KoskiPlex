@@ -4,11 +4,11 @@ import "./App.css";
 
 // Components
 import Chat from "./components/Chat";
-import Controls from "./components/Controls";
 import Header from "./components/Header";
+import Navbar, { TabType } from "./components/Navbar";
 import Orb from "./components/Orb";
 import PracticePanel from "./components/PracticePanel";
-import VoicePanel from "./components/VoicePanel";
+import SettingsView from "./components/SettingsView";
 
 // Hooks
 import { useAudioContext } from "./hooks/useAudioContext";
@@ -25,18 +25,19 @@ import {
   WSMessage,
 } from "./types";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 const STATE_COLORS: Record<AppStatus, { r: number; g: number; b: number }> = {
   idle: { r: 59, g: 130, b: 246 },
   listening: { r: 239, g: 68, b: 68 },
   processing: { r: 245, g: 158, b: 11 },
   speaking: { r: 167, g: 139, b: 250 },
-  error: { r: 185, g: 28, b: 28 }, // Darker red for error to distinguish from listening
+  error: { r: 185, g: 28, b: 28 },
 };
 
 function App() {
   // --- State ---
+  const [activeTab, setActiveTab] = useState<TabType>("chat");
   const [isActive, setIsActive] = useState(false);
   const [status, setStatus] = useState<AppStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -48,8 +49,6 @@ function App() {
     default: [],
     custom: [],
   });
-  const [showVoicePanel, setShowVoicePanel] = useState(false);
-  const [showPracticePanel, setShowPracticePanel] = useState(false);
 
   const [selectedVoice, setSelectedVoice] = useState<SelectedVoice>(() => {
     const saved = localStorage.getItem("koskiplex_voice");
@@ -71,42 +70,49 @@ function App() {
     [],
   );
 
+  const sendAudioRef = useRef<((blob: Blob) => void) | null>(null);
+  const startRecordingRef = useRef<(() => Promise<void>) | null>(null);
+
   const { isConnected, sendAudio, sendCommand } = useVoiceWebSocket({
     selectedVoice,
     onStatusChange: handleStatusChange,
-    onTranscript: (msg: WSMessage) => {
+    onTranscript: useCallback((msg: WSMessage) => {
       if (msg.text) {
         setMessages((prev) => [...prev, { role: "user", text: msg.text! }]);
       }
       if (msg.language) setDetectedLang(msg.language);
       setStatus("processing");
       setStreamingReply("");
-    },
-    onReplyChunk: (msg: WSMessage) => {
+    }, []),
+    onReplyChunk: useCallback((msg: WSMessage) => {
       if (msg.text) {
         setStreamingReply((prev) => prev + (prev ? " " : "") + msg.text);
       }
-    },
-    onAudioChunk: (data: string) => {
-      queueAudio(data);
-    },
-    onReplyDone: (msg: WSMessage) => {
-      if (msg.timing) setTiming(msg.timing);
-      setStreamingReply("");
-      if (msg.full_reply) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", text: msg.full_reply! },
-        ]);
-      }
-
-      // If we are in active session and done playing/thinking, resume listening
-      if (!isPlaying.current && isActiveRef.current) {
-        startRecording();
-      } else if (!isActiveRef.current) {
-        setStatus("idle");
-      }
-    },
+    }, []),
+    onAudioChunk: useCallback(
+      (data: string) => {
+        queueAudio(data);
+      },
+      [queueAudio],
+    ),
+    onReplyDone: useCallback(
+      (msg: WSMessage) => {
+        if (msg.timing) setTiming(msg.timing);
+        setStreamingReply("");
+        if (msg.full_reply) {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: msg.full_reply! },
+          ]);
+        }
+        if (!isPlaying.current && isActiveRef.current) {
+          startRecordingRef.current?.();
+        } else if (!isActiveRef.current) {
+          setStatus("idle");
+        }
+      },
+      [isPlaying],
+    ),
   });
 
   const { isRecording, startRecording, stopRecording } = useVoiceRecorder({
@@ -114,13 +120,17 @@ function App() {
     analyserNode: analyser.current,
     onAudioStop: (blob) => {
       if (blob) {
-        sendAudio(blob);
+        sendAudioRef.current?.(blob);
       } else if (isActiveRef.current) {
-        // Re-start if it was a false trigger (too short or no speech)
-        startRecording();
+        startRecordingRef.current?.();
       }
     },
   });
+
+  useEffect(() => {
+    sendAudioRef.current = sendAudio;
+    startRecordingRef.current = startRecording;
+  }, [sendAudio, startRecording]);
 
   // --- Effects ---
   const stateKey: AppStatus = isRecording
@@ -229,7 +239,6 @@ function App() {
     [fetchVoices, selectedVoice],
   );
 
-  // Sync speaking status with audio context
   useEffect(() => {
     if (isPlaying.current && status !== "speaking") {
       setStatus("speaking");
@@ -242,9 +251,16 @@ function App() {
     }
   }, [isPlaying.current, status, startRecording]);
 
+  // Stop session if we leave the chat tab
+  useEffect(() => {
+    if (activeTab !== "chat" && isActive) {
+      stopSession();
+    }
+  }, [activeTab, isActive, stopSession]);
+
   const statusLabel = {
-    connecting: "CONNECTING...",
-    idle: isActive ? "READY" : "TAP TO BEGIN",
+    connecting: "",
+    idle: isActive ? "READY" : "",
     listening: "LISTENING",
     processing: "THINKING",
     speaking: "SPEAKING",
@@ -259,76 +275,95 @@ function App() {
       <div className="bg-blob bg-blob-2" />
       <div className="noise-overlay" />
 
-      <Header detectedLang={detectedLang} timing={timing} />
-
-      <main className="main">
-        <div className="flex-1 overflow-hidden relative flex flex-col w-full max-w-2xl mx-auto">
-          <div className="flex-1 overflow-visible relative flex flex-col items-center justify-center min-h-[350px]">
-            <Orb
-              isActive={isActive}
-              status={status}
-              accent={accent}
-              analyserNode={analyser.current}
-              onClick={() => {
-                if (!canStart && !isActive) return;
-                isActive ? stopSession() : startSession();
-              }}
-            />
-
-            <div className="mt-8 text-center min-h-[60px]">
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={status}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.2 }}
-                  className="flex flex-col items-center gap-2"
-                >
-                  <span className="status-text m-0">{statusLabel}</span>
-                  {error && <p className="error-text m-0">{error}</p>}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-          </div>
-
-          <div className="h-[40vh] w-full relative flex flex-col">
-            <Chat messages={messages} streamingReply={streamingReply} />
-          </div>
-        </div>
-      </main>
-
-      <AnimatePresence>
-        {showVoicePanel && (
-          <VoicePanel
-            voices={voices}
-            selectedVoice={selectedVoice}
-            onVoiceSelect={setSelectedVoice}
-            onUpload={handleVoiceUpload}
-            onDelete={handleDeleteVoice}
-            onClose={() => setShowVoicePanel(false)}
-            fileInputRef={fileInputRef}
-          />
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showPracticePanel && (
-          <PracticePanel
-            selectedVoice={selectedVoice}
-            onClose={() => setShowPracticePanel(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      <Controls
-        onShowVoicePanel={() => {
-          setShowVoicePanel((p) => !p);
-          fetchVoices();
-        }}
-        onShowPracticePanel={() => setShowPracticePanel((p) => !p)}
+      <Header
+        detectedLang={detectedLang}
+        timing={timing}
         onClearHistory={clearHistory}
       />
+
+      <main className="main-container">
+        <AnimatePresence mode="wait">
+          {activeTab === "chat" && (
+            <motion.div
+              key="chat"
+              className="chat-view-layout"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <div className="orb-wrapper-fixed">
+                <Orb
+                  isActive={isActive}
+                  status={status}
+                  accent={accent}
+                  analyserNode={analyser.current}
+                  onClick={() => {
+                    if (!canStart && !isActive) return;
+                    isActive ? stopSession() : startSession();
+                  }}
+                />
+
+                {statusLabel && (
+                  <div className="status-container-fixed">
+                    <AnimatePresence mode="wait">
+                      <motion.div
+                        key={status}
+                        initial={{ opacity: 0, y: 5 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -5 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <span className="status-text">{statusLabel}</span>
+                          <p className="error-text">{error}</p>
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+                )}
+              </div>
+
+              <div className="chat-viewport-bottom">
+                <Chat messages={messages} streamingReply={streamingReply} />
+              </div>
+            </motion.div>
+          )}
+
+          {activeTab === "practice" && (
+            <motion.div
+              key="practice"
+              className="view-container"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <PracticePanel selectedVoice={selectedVoice} />
+            </motion.div>
+          )}
+
+          {activeTab === "settings" && (
+            <motion.div
+              key="settings"
+              className="view-container"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <SettingsView
+                voices={voices}
+                selectedVoice={selectedVoice}
+                onVoiceSelect={setSelectedVoice}
+                onUpload={handleVoiceUpload}
+                onDelete={handleDeleteVoice}
+                fileInputRef={fileInputRef}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </main>
+
+      <Navbar activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   );
 }

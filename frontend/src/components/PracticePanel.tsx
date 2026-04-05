@@ -1,83 +1,125 @@
 import { motion } from "framer-motion";
-import { Mic, Play, Square, X } from "lucide-react";
-import React, { useRef, useState } from "react";
+import {
+  Check,
+  Loader2,
+  Mic,
+  Play,
+  RefreshCw,
+  Save,
+  Square,
+} from "lucide-react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { API_URL } from "../App";
 import { SelectedVoice } from "../types";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-const PRACTICE_PHRASE =
-  "The sophisticated artificial intelligence system demonstrated remarkable versatility in processing complex linguistic patterns and generating human-like responses with exceptional precision.";
 
 interface PracticePanelProps {
   selectedVoice: SelectedVoice;
-  onClose: () => void;
 }
 
-const PracticePanel: React.FC<PracticePanelProps> = ({
-  selectedVoice,
-  onClose,
-}) => {
+const PracticePanel: React.FC<PracticePanelProps> = ({ selectedVoice }) => {
+  const [phrase, setPhrase] = useState("");
+  const [isFetchingPhrase, setIsFetchingPhrase] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
-  const [isPlayingRecording, setIsPlayingRecording] = useState(false);
   const [isPlayingReference, setIsPlayingReference] = useState(false);
+  const [isPlayingRecording, setIsPlayingRecording] = useState(false);
+  const [voiceName, setVoiceName] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">(
+    "idle",
+  );
 
+  const hasFetchedRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const referenceAudioRef = useRef<HTMLAudioElement | null>(null);
   const userAudioRef = useRef<HTMLAudioElement | null>(null);
 
+  const fetchPhrase = useCallback(async () => {
+    setIsFetchingPhrase(true);
+    try {
+      const res = await fetch(`${API_URL}/practice/phrase`);
+      const data = await res.json();
+      if (data.phrase) setPhrase(data.phrase);
+    } catch (err) {
+      console.error("Failed to fetch phrase:", err);
+    } finally {
+      setIsFetchingPhrase(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasFetchedRef.current) {
+      fetchPhrase();
+      hasFetchedRef.current = true;
+    }
+  }, [fetchPhrase]);
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
       };
 
-      recorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: "audio/webm" });
-        setRecordedBlob(blob);
-        stream.getTracks().forEach((track) => track.stop());
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, {
+          type: "audio/webm",
+        });
+        setRecordedBlob(audioBlob);
       };
 
-      recorder.start();
-      mediaRecorderRef.current = recorder;
+      mediaRecorder.start();
       setIsRecording(true);
-      setRecordedBlob(null);
     } catch (err) {
-      console.error("Failed to start recording:", err);
+      console.error("Recording error:", err);
     }
   };
 
   const stopRecording = () => {
-    if (
-      mediaRecorderRef.current &&
-      mediaRecorderRef.current.state === "recording"
-    ) {
+    if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      mediaRecorderRef.current.stream
+        .getTracks()
+        .forEach((track) => track.stop());
     }
   };
 
   const playReference = () => {
+    if (isPlayingReference && referenceAudioRef.current) {
+      referenceAudioRef.current.pause();
+      setIsPlayingReference(false);
+      return;
+    }
+
     if (referenceAudioRef.current) {
       referenceAudioRef.current.pause();
     }
 
-    // Construct reference URL
-    const url = `${API_URL}/practice/reference?text=${encodeURIComponent(PRACTICE_PHRASE)}&engine=${selectedVoice.engine}&voice=${encodeURIComponent(selectedVoice.voice)}&lang=en`;
+    const url = `${API_URL}/practice/reference?text=${encodeURIComponent(phrase)}&engine=${selectedVoice.engine}&voice=${encodeURIComponent(selectedVoice.voice)}&lang=it`;
 
     const audio = new Audio(url);
     referenceAudioRef.current = audio;
     audio.onplay = () => setIsPlayingReference(true);
     audio.onended = () => setIsPlayingReference(false);
+    audio.onerror = () => setIsPlayingReference(false);
     audio.play().catch((e) => console.error("Reference play failed:", e));
   };
 
   const playUserRecording = () => {
+    if (isPlayingRecording && userAudioRef.current) {
+      userAudioRef.current.pause();
+      setIsPlayingRecording(false);
+      return;
+    }
+
     if (!recordedBlob) return;
 
     const url = URL.createObjectURL(recordedBlob);
@@ -91,9 +133,43 @@ const PracticePanel: React.FC<PracticePanelProps> = ({
     audio.play().catch((e) => console.error("User recording play failed:", e));
   };
 
+  const handleSaveVoice = async () => {
+    if (!recordedBlob || !voiceName.trim()) return;
+
+    setIsSaving(true);
+    setSaveStatus("idle");
+
+    try {
+      const formData = new FormData();
+      formData.append(
+        "file",
+        recordedBlob,
+        `${voiceName.trim().replace(/\s+/g, "_")}.webm`,
+      );
+      formData.append("name", voiceName.trim());
+
+      const res = await fetch(`${API_URL}/voices/upload`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) throw new Error("Upload failed");
+
+      setSaveStatus("success");
+      setVoiceName("");
+      // Reset after 3 seconds
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    } catch (err) {
+      console.error("Save voice error:", err);
+      setSaveStatus("error");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <motion.div
-      className="voice-panel practice-panel"
+      className="practice-panel"
       initial={{ opacity: 0, y: 40, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 20, scale: 0.95 }}
@@ -101,14 +177,24 @@ const PracticePanel: React.FC<PracticePanelProps> = ({
     >
       <div className="voice-panel-header">
         <h3 className="voice-panel-title">PRONUNCIATION PRACTICE</h3>
-        <button className="voice-panel-close" onClick={onClose}>
-          <X size={18} />
-        </button>
       </div>
 
       <div className="practice-content">
-        <p className="practice-label">PHRASE TO READ:</p>
-        <div className="practice-phrase">"{PRACTICE_PHRASE}"</div>
+        <div className="practice-label-container">
+          <p className="practice-label m-0">PHRASE TO READ:</p>
+          <button
+            className={`phrase-refresh-btn ${isFetchingPhrase ? "spinning" : ""}`}
+            onClick={fetchPhrase}
+            disabled={isFetchingPhrase}
+            title="Get new phrase"
+          >
+            <RefreshCw size={14} />
+          </button>
+        </div>
+
+        <div className={`practice-phrase ${isFetchingPhrase ? "loading" : ""}`}>
+          {isFetchingPhrase ? "Generating..." : `"${phrase}"`}
+        </div>
 
         <div className="practice-actions">
           <div className="practice-action-group">
@@ -116,14 +202,16 @@ const PracticePanel: React.FC<PracticePanelProps> = ({
             <button
               className={`practice-btn ${isPlayingReference ? "active" : ""}`}
               onClick={playReference}
-              disabled={isPlayingReference}
+              disabled={isFetchingPhrase}
             >
               {isPlayingReference ? (
-                <div className="loading-spinner-small" />
+                <Square size={20} className="text-red-400" />
               ) : (
                 <Play size={20} />
               )}
-              <span>LISTEN TO REFERENCE</span>
+              <span>
+                {isPlayingReference ? "STOP REFERENCE" : "LISTEN TO REFERENCE"}
+              </span>
             </button>
           </div>
 
@@ -133,30 +221,74 @@ const PracticePanel: React.FC<PracticePanelProps> = ({
               <button
                 className={`practice-btn ${isRecording ? "recording" : ""}`}
                 onClick={isRecording ? stopRecording : startRecording}
+                disabled={isFetchingPhrase}
               >
                 {isRecording ? <Square size={20} /> : <Mic size={20} />}
-                <span>
-                  {isRecording ? "STOP RECORDING" : "START RECORDING"}
-                </span>
+                <span>{isRecording ? "STOP" : "RECORD"}</span>
               </button>
 
               {recordedBlob && !isRecording && (
                 <button
                   className={`practice-btn ${isPlayingRecording ? "active" : ""}`}
                   onClick={playUserRecording}
-                  disabled={isPlayingRecording}
+                  disabled={isFetchingPhrase}
                 >
                   {isPlayingRecording ? (
-                    <div className="loading-spinner-small" />
+                    <Square size={20} className="text-red-400" />
                   ) : (
                     <Play size={20} />
                   )}
-                  <span>PLAYBACK</span>
+                  <span>{isPlayingRecording ? "STOP" : "PLAYBACK"}</span>
                 </button>
               )}
             </div>
           </div>
         </div>
+
+        {recordedBlob && !isRecording && (
+          <motion.div
+            className="practice-save-section"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+          >
+            <div className="practice-action-label">SAVE AS CUSTOM VOICE</div>
+            <div className="save-voice-controls">
+              <input
+                type="text"
+                placeholder="Name of your voice..."
+                className="voice-name-input"
+                value={voiceName}
+                onChange={(e) => setVoiceName(e.target.value)}
+                disabled={isSaving || saveStatus === "success"}
+              />
+              <button
+                className={`save-voice-btn ${saveStatus}`}
+                onClick={handleSaveVoice}
+                disabled={
+                  isSaving || !voiceName.trim() || saveStatus === "success"
+                }
+              >
+                {isSaving ? (
+                  <Loader2 className="spinning" size={18} />
+                ) : saveStatus === "success" ? (
+                  <Check size={18} />
+                ) : (
+                  <Save size={18} />
+                )}
+                <span>
+                  {isSaving
+                    ? "SAVING..."
+                    : saveStatus === "success"
+                      ? "VOICE SAVED!"
+                      : "SAVE VOICE"}
+                </span>
+              </button>
+            </div>
+            {saveStatus === "error" && (
+              <p className="save-error-msg">Failed to save voice. Try again.</p>
+            )}
+          </motion.div>
+        )}
       </div>
     </motion.div>
   );

@@ -44,3 +44,21 @@ def stream_llm_reply(user_text: str, history: list[dict]):
         messages=messages,
         stream=True,
     )
+
+def generate_practice_phrase(n_chars: int = 300) -> str:
+    """Generate a linguistically beautiful, evocative, and challenging Italian sentence for practice."""
+    prompt = (
+        f"Genera una singola frase in italiano che sia un capolavoro di musicalità, eleganza e profondità poetica, "
+        f"ideale per chi vuole perfezionare la propria dizione italiana. "
+        f"La frase deve essere lunga circa {n_chars} caratteri. "
+        f"Cerca di tessere una prosa che includa raddoppiamenti fonosintattici, dittonghi armoniosi, "
+        f"e suoni caratteristici come la 'z' aspra o dolce, la 's' sibilante e i gruppi 'gl', 'gn', 'sc'. "
+        f"Non creare uno scioglilingua meccanico, ma un pensiero evocativo, quasi letterario, "
+        f"che sia un piacere sia per l'orecchio che per la mente. "
+        f"Rispondi SOLO con il testo della frase, senza commenti, introduzioni o virgolette."
+    )
+    completion = client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return completion.choices[0].message.content.strip()
