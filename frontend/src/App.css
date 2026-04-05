@@ -1419,6 +1419,31 @@
   margin-bottom: 140px !important; /* Local margin to clear navbar */
 }
 
+.voice-previews-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-preview.btn-orig {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-dim);
+}
+
+.btn-preview.btn-orig:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-preview.btn-orig.playing {
+  background: rgba(74, 222, 128, 0.1);
+  color: rgb(74, 222, 128);
+  border-color: rgba(74, 222, 128, 0.3);
+  box-shadow: 0 0 15px -5px rgba(74, 222, 128, 0.4);
+}
+
 .voice-badge {
   font-size: 0.55rem;
   padding: 2px 6px;

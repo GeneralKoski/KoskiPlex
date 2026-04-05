@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Loader2, Music, Play, Plus, Trash2, Upload } from "lucide-react";
+import { Loader2, Mic, Music, Play, Plus, Trash2, Upload } from "lucide-react";
 import React, { useRef, useState } from "react";
 import { SelectedVoice, VoicesState } from "../types";
 
@@ -59,7 +59,38 @@ const SettingsView: React.FC<SettingsViewProps> = ({
   fileInputRef,
 }) => {
   const [playingVoice, setPlayingVoice] = useState<string | null>(null);
+  const [playingOriginal, setPlayingOriginal] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleOriginalPreview = async (e: React.MouseEvent, voice: string) => {
+    e.stopPropagation();
+
+    if (playingOriginal === voice) {
+      audioRef.current?.pause();
+      setPlayingOriginal(null);
+      return;
+    }
+
+    setPlayingOriginal(voice);
+    const url = `${API_URL}/voices/original/${encodeURIComponent(voice)}`;
+    console.log("🔊 Initializing original preview playback from:", url);
+
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    audio.onended = () => setPlayingOriginal(null);
+    audio.onerror = () => setPlayingOriginal(null);
+
+    try {
+      await audio.play();
+    } catch (err) {
+      console.error("Original preview failed:", err);
+      setPlayingOriginal(null);
+    }
+  };
 
   const handlePreview = async (
     e: React.MouseEvent,
@@ -161,6 +192,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                   selectedVoice.engine === "xtts" &&
                   selectedVoice.voice === v.name;
                 const isPlaying = playingVoice === v.name;
+                const isPlayingOrig = playingOriginal === v.name;
                 return (
                   <motion.div
                     key={v.name}
@@ -178,17 +210,30 @@ const SettingsView: React.FC<SettingsViewProps> = ({
                     }
                   >
                     <div className="voice-card-content">
-                      <button
-                        className={`btn-preview ${isPlaying ? "playing" : ""}`}
-                        onClick={(e) => handlePreview(e, "xtts", v.name)}
-                        title="Preview voice"
-                      >
-                        {isPlaying ? (
-                          <Loader2 className="spinning" size={14} />
-                        ) : (
-                          <Play size={14} />
-                        )}
-                      </button>
+                      <div className="voice-previews-group">
+                        <button
+                          className={`btn-preview ${isPlaying ? "playing" : ""}`}
+                          onClick={(e) => handlePreview(e, "xtts", v.name)}
+                          title="Preview AI Voice"
+                        >
+                          {isPlaying ? (
+                            <Loader2 className="spinning" size={14} />
+                          ) : (
+                            <Play size={14} />
+                          )}
+                        </button>
+                        <button
+                          className={`btn-preview btn-orig ${isPlayingOrig ? "playing" : ""}`}
+                          onClick={(e) => handleOriginalPreview(e, v.name)}
+                          title="Hear Original Reference"
+                        >
+                          {isPlayingOrig ? (
+                            <Loader2 className="spinning" size={14} />
+                          ) : (
+                            <Mic size={14} />
+                          )}
+                        </button>
+                      </div>
                       <div className="voice-info">
                         <span className="voice-name">{v.name}</span>
                       </div>
