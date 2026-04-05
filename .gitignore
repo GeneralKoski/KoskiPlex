@@ -15,3 +15,5 @@ CLAUDE.md
 # Backend voices (except default ones if any, but currently better ignore all clones)
 backend/voices/*.wav
 !backend/voices/.gitkeep
+backend/voices/*
+!backend/voices/.gitkeep

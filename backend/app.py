@@ -2,6 +2,8 @@ import asyncio
 import base64
 import json
 import os
+import subprocess
+import tempfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect
@@ -61,12 +63,32 @@ async def upload_voice(name: str = Form(...), file: UploadFile = File(...)):
         return {"error": "Invalid name"}
 
     audio_bytes = await file.read()
-    # Keep original extension or default to .wav
-    ext = Path(file.filename).suffix if file.filename else ".wav"
-    if not ext: ext = ".wav"
 
-    voice_path = VOICES_DIR / f"{safe_name}{ext}"
-    voice_path.write_bytes(audio_bytes)
+    # Save as .wav for the cloner (always convert for compatibility)
+    final_path = VOICES_DIR / f"{safe_name}.wav"
+
+    # Use temporary files for conversion
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".upload") as tmp_in:
+        tmp_in.write(audio_bytes)
+        tmp_in_path = tmp_in.name
+
+    try:
+        # Convert to 16kHz, mono, wav using ffmpeg
+        # -y: overwrite
+        # -ar 16000: set sample rate
+        # -ac 1: set mono
+        subprocess.run(
+            ["ffmpeg", "-y", "-i", tmp_in_path, "-ar", "16000", "-ac", "1", str(final_path)],
+            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+        print(f"✅ [Voices] Converted and saved: {final_path}")
+    except Exception as e:
+        print(f"❌ [Voices] Conversion failed: {e}")
+        # Fallback: save original if ffmpeg failed (less reliable)
+        final_path.write_bytes(audio_bytes)
+    finally:
+        if os.path.exists(tmp_in_path):
+            os.remove(tmp_in_path)
 
     return {"name": safe_name, "engine": "xtts"}
 
@@ -282,6 +304,24 @@ async def practice_reference(text: str, engine: str = "edge", voice: str = "", l
         return Response(content=audio_data, media_type="audio/mpeg")
     return {"error": "Failed to generate audio"}
 
+
+@app.get("/voices/original/{name}")
+async def get_original_voice(name: str):
+    """Serve the original reference audio file for a cloned voice."""
+    target_name = name.strip().lower()
+    media_types = {".wav": "audio/wav", ".mp3": "audio/mpeg", ".webm": "audio/webm", ".m4a": "audio/x-m4a"}
+
+    # Case-insensitive search
+    for f in VOICES_DIR.iterdir():
+        if f.stem.lower() == target_name and f.suffix.lower() in media_types:
+            from fastapi.responses import FileResponse
+            return FileResponse(path=str(f), media_type=media_types.get(f.suffix.lower()))
+
+    import os
+    print(f"❌ [Voices] '{target_name}' not found. Directory '{VOICES_DIR.absolute()}' contains: {os.listdir(VOICES_DIR)}")
+    from fastapi import HTTPException
+    raise HTTPException(status_code=404, detail=f"Original recording for '{target_name}' not found")
+
 # ── HTTP endpoints (kept for compatibility) ───────
 
 @app.get("/health")
@@ -302,4 +342,4 @@ async def chat(text: str, history: str = "[]"):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
