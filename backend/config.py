@@ -32,22 +32,22 @@ WHISPER_HALLUCINATIONS = {
 
 # --- TTS Settings ---
 EDGE_VOICES = {
-    "italian": "it-IT-IsabellaNeural",
-    "english": "en-US-JennyNeural",
-    "spanish": "es-ES-ElviraNeural",
-    "french": "fr-FR-DeniseNeural",
-    "german": "de-DE-KatjaNeural",
-    "portuguese": "pt-BR-FranciscaNeural",
-    "dutch": "nl-NL-ColetteNeural",
-    "russian": "ru-RU-SvetlanaNeural",
-    "japanese": "ja-JP-NanamiNeural",
-    "chinese": "zh-CN-XiaoxiaoNeural",
-    "korean": "ko-KR-SunHiNeural",
-    "arabic": "ar-SA-ZariyahNeural",
-    "hindi": "hi-IN-SwaraNeural",
-    "turkish": "tr-TR-EmelNeural",
-    "polish": "pl-PL-AgnieszkaNeural",
-    "swedish": "sv-SE-SofieNeural",
+    "it": "it-IT-IsabellaNeural",
+    "en": "en-US-JennyNeural",
+    "es": "es-ES-ElviraNeural",
+    "fr": "fr-FR-DeniseNeural",
+    "de": "de-DE-KatjaNeural",
+    "pt": "pt-BR-FranciscaNeural",
+    "nl": "nl-NL-ColetteNeural",
+    "ru": "ru-RU-SvetlanaNeural",
+    "ja": "ja-JP-NanamiNeural",
+    "zh": "zh-CN-XiaoxiaoNeural",
+    "ko": "ko-KR-SunHiNeural",
+    "ar": "ar-SA-ZariyahNeural",
+    "hi": "hi-IN-SwaraNeural",
+    "tr": "tr-TR-EmelNeural",
+    "pl": "pl-PL-AgnieszkaNeural",
+    "sv": "sv-SE-SofieNeural",
 }
 DEFAULT_EDGE_VOICE = "en-US-JennyNeural"
 

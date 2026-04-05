@@ -82,15 +82,15 @@ def tts_xtts_sync(text: str, speaker_wav: str, language: str = "en") -> bytes:
                 pass
 
 async def generate_audio(text: str, engine: str, voice: str, language: str) -> bytes:
-    """Entry point for audio generation across multiple engines."""
-    print(f"📡 [Audio] Request: engine={engine}, voice={voice}, lang={language}")
-    
+    """Entry point for audio generation across multiple engines with intelligent fallback."""
+    lang_iso = str(language)[:2] if language else "it"
+    print(f"📡 [Audio] Request: engine={engine}, voice={voice}, lang_iso={lang_iso}")
+
     if engine == "xtts":
         model = get_xtts()
         if not model:
-            print("⚠️ [XTTS] Model not available. Falling back to Edge-TTS.")
-            edge_voice = EDGE_VOICES.get(language[:2], DEFAULT_EDGE_VOICE)
-            return await tts_edge(text, edge_voice)
+            print(f"⚠️ [XTTS] Model not available. Falling back to Edge-TTS ({lang_iso}).")
+            return await tts_edge(text, EDGE_VOICES.get(lang_iso, DEFAULT_EDGE_VOICE))
 
         voice_path = None
         for ext in [".wav", ".mp3", ".webm", ".m4a"]:
@@ -100,20 +100,18 @@ async def generate_audio(text: str, engine: str, voice: str, language: str) -> b
                 break
 
         if not voice_path:
-            print(f"⚠️ [XTTS] Voice reference file not found for: '{voice}'. Falling back to Edge-TTS.")
-            edge_voice = EDGE_VOICES.get(language[:2], DEFAULT_EDGE_VOICE)
-            return await tts_edge(text, edge_voice)
-            
-        print(f"🎯 [XTTS] Found reference file: {voice_path}")
-        lang_code = str(language)[:2] if language else "it"
-        audio = await asyncio.to_thread(tts_xtts_sync, text, str(voice_path), lang_code)
+            print(f"⚠️ [XTTS] Reference '{voice}' not found. Falling back to Edge-TTS ({lang_iso}).")
+            return await tts_edge(text, EDGE_VOICES.get(lang_iso, DEFAULT_EDGE_VOICE))
+
+        print(f"🎯 [XTTS] Attempting generation for: {voice}")
+        audio = await asyncio.to_thread(tts_xtts_sync, text, str(voice_path), lang_iso)
         
         if not audio:
-            print("⚠️ [XTTS] Sync generation returned no data. Falling back to Edge-TTS.")
-            edge_voice = EDGE_VOICES.get(language[:2], DEFAULT_EDGE_VOICE)
-            return await tts_edge(text, edge_voice)
+            print(f"⚠️ [XTTS] Generation failed. Final fallback to Edge-TTS ({lang_iso}).")
+            return await tts_edge(text, EDGE_VOICES.get(lang_iso, DEFAULT_EDGE_VOICE))
             
         return audio
     else:
-        edge_voice = voice or EDGE_VOICES.get(language, DEFAULT_EDGE_VOICE)
+        # Standard engine: use provided voice ID or lookup by ISO code
+        edge_voice = voice if (voice and "-" in str(voice)) else EDGE_VOICES.get(lang_iso, DEFAULT_EDGE_VOICE)
         return await tts_edge(text, edge_voice)
