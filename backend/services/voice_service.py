@@ -1,7 +1,9 @@
 import asyncio
+import gc
 import os
 import re
 import subprocess
+import threading
 import time
 import uuid
 import tempfile
@@ -12,6 +14,8 @@ from pathlib import Path
 from typing import AsyncGenerator
 import edge_tts
 from config import VOICES_DIR, DEFAULT_EDGE_VOICE, EDGE_VOICES
+
+XTTS_UNLOAD_AFTER = 300  # seconds (5 minutes)
 
 def split_text_into_segments(text: str):
     """Split text by strong punctuation (. ! ?) and group them into segments."""
@@ -35,10 +39,30 @@ def split_text_into_segments(text: str):
     return [s for s in segments if s.strip()]
 
 xtts_model = None
+_xtts_last_used = 0
+_xtts_unload_timer = None
+
+
+def _unload_xtts():
+    """Unload XTTS model from memory after inactivity."""
+    global xtts_model
+    if xtts_model is not None and (time.time() - _xtts_last_used) >= XTTS_UNLOAD_AFTER:
+        xtts_model = None
+        gc.collect()
+        print("🧹 [XTTS] Model unloaded from memory after 5 min inactivity.")
+
+def _schedule_xtts_unload():
+    """Schedule XTTS unload after inactivity period."""
+    global _xtts_unload_timer
+    if _xtts_unload_timer is not None:
+        _xtts_unload_timer.cancel()
+    _xtts_unload_timer = threading.Timer(XTTS_UNLOAD_AFTER, _unload_xtts)
+    _xtts_unload_timer.daemon = True
+    _xtts_unload_timer.start()
 
 def get_xtts():
-    """Lazily load the XTTS model."""
-    global xtts_model
+    """Lazily load the XTTS model, auto-unloads after inactivity."""
+    global xtts_model, _xtts_last_used
     if xtts_model is None:
         start_t = time.time()
         print("🚀 [XTTS] Loading model tts_models/multilingual/multi-dataset/xtts_v2...")
@@ -52,6 +76,8 @@ def get_xtts():
             print("   Hint: Try installing: pip install bangla==0.0.2 gruut")
         except Exception as e:
             print(f"❌ [XTTS] Error loading model: {e}")
+    _xtts_last_used = time.time()
+    _schedule_xtts_unload()
     return xtts_model
 
 async def tts_edge(text: str, voice: str = DEFAULT_EDGE_VOICE) -> bytes:
