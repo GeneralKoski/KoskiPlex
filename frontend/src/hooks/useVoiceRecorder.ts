@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { AppStatus } from "../types";
 
 const SILENCE_THRESHOLD = 50;
@@ -8,7 +8,7 @@ const MIN_SPEECH_MS = 800;
 interface UseVoiceRecorderProps {
   onAudioStop: (blob: Blob | null) => void;
   onStatusChange: (status: AppStatus, errMsg?: string) => void;
-  analyserNode: AnalyserNode | null;
+  analyserRef: RefObject<AnalyserNode | null>;
 }
 
 interface VoiceRecorderHook {
@@ -20,7 +20,7 @@ interface VoiceRecorderHook {
 export function useVoiceRecorder({
   onAudioStop,
   onStatusChange,
-  analyserNode,
+  analyserRef,
 }: UseVoiceRecorderProps): VoiceRecorderHook {
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -29,7 +29,7 @@ export function useVoiceRecorder({
   const hadSpeechRef = useRef(false);
   const speechStartRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const sourceNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
 
   const stopRecording = useCallback(() => {
     if (silenceCheckRef.current !== null) {
@@ -37,9 +37,9 @@ export function useVoiceRecorder({
       silenceCheckRef.current = null;
     }
 
-    if (sourceRef.current) {
-      sourceRef.current.disconnect();
-      sourceRef.current = null;
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.disconnect();
+      sourceNodeRef.current = null;
     }
 
     if (
@@ -89,12 +89,11 @@ export function useVoiceRecorder({
       setIsRecording(true);
       onStatusChange?.("listening");
 
-      // Use the provided analyser node for VAD
+      const analyserNode = analyserRef.current;
       if (analyserNode) {
-        // Connect the microphone stream to the analyser
         const source = (analyserNode.context as AudioContext).createMediaStreamSource(stream);
         source.connect(analyserNode);
-        sourceRef.current = source;
+        sourceNodeRef.current = source;
 
         const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
         let silentSince: number | null = null;
@@ -123,7 +122,7 @@ export function useVoiceRecorder({
       console.error("Microphone error:", err);
       onStatusChange?.("error", "Microphone access denied");
     }
-  }, [onAudioStop, onStatusChange, analyserNode, stopRecording]);
+  }, [onAudioStop, onStatusChange, analyserRef, stopRecording]);
 
   useEffect(() => {
     return () => stopRecording();

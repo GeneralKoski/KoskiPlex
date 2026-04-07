@@ -22,6 +22,7 @@ const Chat: React.FC<ChatProps> = ({ messages, streamingReply }) => {
             key={`${i}-${msg.text.slice(0, 5)}`}
             className={`chat-bubble ${msg.role === "user" ? "chat-user" : "chat-ai"}`}
             layout
+            style={{ overflow: "visible" }}
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9, y: 10 }}
@@ -38,6 +39,7 @@ const Chat: React.FC<ChatProps> = ({ messages, streamingReply }) => {
             key="streaming"
             className="chat-bubble chat-ai chat-streaming"
             layout
+            style={{ overflow: "visible" }}
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.2 }}

@@ -1,5 +1,9 @@
 import { RefObject, useCallback, useEffect, useRef } from "react";
 
+interface UseAudioContextOptions {
+  onPlaybackDone?: () => void;
+}
+
 export interface AudioContextHook {
   initAudioContext: () => { ctx: AudioContext; analyser: AnalyserNode };
   queueAudio: (base64: string) => void;
@@ -9,12 +13,14 @@ export interface AudioContextHook {
   isPlaying: RefObject<boolean>;
 }
 
-export function useAudioContext(): AudioContextHook {
+export function useAudioContext(options?: UseAudioContextOptions): AudioContextHook {
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const queueRef = useRef<string[]>([]);
   const isPlayingRef = useRef<boolean>(false);
   const sourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const onPlaybackDoneRef = useRef(options?.onPlaybackDone);
+  onPlaybackDoneRef.current = options?.onPlaybackDone;
 
   const initAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
@@ -39,6 +45,7 @@ export function useAudioContext(): AudioContextHook {
   const playNext = useCallback(async () => {
     if (queueRef.current.length === 0) {
       isPlayingRef.current = false;
+      onPlaybackDoneRef.current?.();
       return;
     }
 

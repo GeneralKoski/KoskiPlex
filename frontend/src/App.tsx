@@ -62,8 +62,16 @@ function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Custom Hooks ---
+  const handlePlaybackDone = useCallback(() => {
+    if (isActiveRef.current) {
+      startRecordingRef.current?.();
+    } else {
+      setStatus("idle");
+    }
+  }, []);
+
   const { initAudioContext, queueAudio, stopPlayback, analyser, isPlaying } =
-    useAudioContext();
+    useAudioContext({ onPlaybackDone: handlePlaybackDone });
 
   const handleStatusChange = useCallback(
     (newStatus: AppStatus, errMsg?: string) => {
@@ -95,6 +103,7 @@ function App() {
     onAudioChunk: useCallback(
       (data: string) => {
         queueAudio(data);
+        setStatus("speaking");
       },
       [queueAudio],
     ),
@@ -120,7 +129,7 @@ function App() {
 
   const { isRecording, startRecording, stopRecording } = useVoiceRecorder({
     onStatusChange: handleStatusChange,
-    analyserNode: analyser.current,
+    analyserRef: analyser,
     onAudioStop: (blob) => {
       if (blob) {
         sendAudioRef.current?.(blob);
@@ -243,18 +252,6 @@ function App() {
     [fetchVoices, selectedVoice],
   );
 
-  useEffect(() => {
-    if (isPlaying.current && status !== "speaking") {
-      setStatus("speaking");
-    } else if (!isPlaying.current && status === "speaking") {
-      if (isActiveRef.current) {
-        startRecording();
-      } else {
-        setStatus("idle");
-      }
-    }
-  }, [isPlaying.current, status, startRecording]);
-
   // Stop session if we leave the chat tab
   useEffect(() => {
     if (activeTab !== "chat" && isActive) {
@@ -301,7 +298,7 @@ function App() {
                   isActive={isActive}
                   status={status}
                   accent={accent}
-                  analyserNode={analyser.current}
+                  analyserRef={analyser}
                   onClick={() => {
                     if (!canStart && !isActive) return;
                     isActive ? stopSession() : startSession();
@@ -319,7 +316,7 @@ function App() {
                         transition={{ duration: 0.2 }}
                       >
                         <span className="status-text">{statusLabel}</span>
-                        <p className="error-text">{error}</p>
+                        {error && <p className="error-text">{error}</p>}
                       </motion.div>
                     </AnimatePresence>
                   </div>

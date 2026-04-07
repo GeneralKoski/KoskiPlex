@@ -1,17 +1,17 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { Mic, Square } from "lucide-react";
-import React, { useEffect, useRef } from "react";
+import React, { RefObject, useEffect, useRef } from "react";
 import { AccentColor, AppStatus } from "../types";
 
 const VIZ_BARS = 64;
-const VIZ_INNER_RADIUS = 88;
-const VIZ_MAX_BAR = 50;
+const VIZ_INNER_RADIUS = 110;
+const VIZ_MAX_BAR = 60;
 
 interface OrbProps {
   isActive: boolean;
   status: AppStatus;
   accent: AccentColor;
-  analyserNode: AnalyserNode | null;
+  analyserRef: RefObject<AnalyserNode | null>;
   onClick: () => void;
 }
 
@@ -19,7 +19,7 @@ const Orb: React.FC<OrbProps> = ({
   isActive,
   status,
   accent,
-  analyserNode,
+  analyserRef,
   onClick,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -27,21 +27,31 @@ const Orb: React.FC<OrbProps> = ({
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !analyserNode) return;
+    if (!canvas) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const size = 320;
+    const size = 400;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
     ctx.scale(dpr, dpr);
 
-    const dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+    let dataArray: Uint8Array<ArrayBuffer> | null = null;
     const smoothed = new Float32Array(VIZ_BARS).fill(0);
 
     const draw = () => {
+      const analyserNode = analyserRef.current;
+      if (!analyserNode) {
+        vizFrameRef.current = requestAnimationFrame(draw);
+        return;
+      }
+
+      if (!dataArray) {
+        dataArray = new Uint8Array(analyserNode.frequencyBinCount);
+      }
+
       analyserNode.getByteFrequencyData(dataArray);
       ctx.clearRect(0, 0, size, size);
       const cx = size / 2;
@@ -77,14 +87,14 @@ const Orb: React.FC<OrbProps> = ({
         cancelAnimationFrame(vizFrameRef.current);
       }
     };
-  }, [accent, analyserNode]);
+  }, [accent, analyserRef]);
 
   return (
     <div className="orb-area" data-status={status}>
       <canvas
         ref={canvasRef}
         className="viz-canvas"
-        style={{ width: "320px", height: "320px" }}
+        style={{ width: "400px", height: "400px" }}
       />
       <div className="orb-rings">
         <div className="ring ring-1" />
